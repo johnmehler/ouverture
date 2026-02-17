@@ -1,0 +1,174 @@
+/* src/app.css - Modern, Premium, Dark-Themed Styles */
+
+:root {
+  /* HSL Color Palette - Vibrant & Premium */
+  --primary-hue: 250;
+  /* Deep Purple/Indigo */
+  --primary-sat: 85%;
+  --primary-light: 65%;
+
+  --secondary-hue: 190;
+  /* Cyan/Teal */
+  --secondary-sat: 90%;
+  --secondary-light: 60%;
+
+  --bg-hue: 240;
+  --bg-sat: 20%;
+  --bg-dark: 8%;
+  /* Very dark background */
+
+  --surface-hue: 240;
+  --surface-sat: 15%;
+  --surface-light: 14%;
+
+  /* Generated Colors */
+  --color-primary: hsl(var(--primary-hue), var(--primary-sat), var(--primary-light));
+  --color-secondary: hsl(var(--secondary-hue), var(--secondary-sat), var(--secondary-light));
+
+  --color-bg: hsl(var(--bg-hue), var(--bg-sat), var(--bg-dark));
+  --color-surface: hsl(var(--surface-hue), var(--surface-sat), var(--surface-light));
+  --color-surface-hover: hsl(var(--surface-hue), var(--surface-sat), 18%);
+
+  --color-text-main: hsl(0, 0%, 95%);
+  --color-text-muted: hsl(240, 10%, 70%);
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+  --font-sans: 'Outfit', 'Inter', system-ui, sans-serif;
+}
+
+/* Reset & Base */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-bg);
+  color: var(--color-text-main);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Typography */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  line-height: 1.2;
+  font-weight: 700;
+  color: #fff;
+}
+
+h1 {
+  font-size: 3rem;
+  color: var(--color-primary);
+  margin-bottom: 1rem;
+}
+
+p {
+  color: var(--color-text-muted);
+  margin-bottom: 1rem;
+}
+
+/* Utility Components */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: none;
+  font-size: 1rem;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: white;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-primary:hover {
+  background: hsl(var(--primary-hue), var(--primary-sat), 70%);
+  /* Lighter primary */
+}
+
+.card {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  transition: border-color 0.2s ease;
+}
+
+.card:hover {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Glassmorphism Hints */
+.glass {
+  background: rgba(20, 20, 30, 0.6);
+  backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Animations */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+.mr-2 {
+  margin-right: 0.5rem;
+}
+
+.w-full {
+  width: 100%;
+}
