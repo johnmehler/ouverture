@@ -10,9 +10,11 @@ export interface Game {
     url: string;
     result: '1-0' | '0-1' | '1/2-1/2' | '*';
     // Parsed fields
-    moves: string[]; // LAN or SAN? PGN text includes moves.
+    moves: string[];
     playerColor: 'white' | 'black';
     myRating: number;
+    opponentName: string;
+    opponentRating: number;
 }
 
 export interface FetchOptions {

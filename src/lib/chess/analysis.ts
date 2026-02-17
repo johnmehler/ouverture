@@ -15,8 +15,8 @@ export interface PositionNode {
 
 export interface OpeningStats {
     name: string;
-    asWhite: { games: number; wins: number; losses: number; draws: number };
-    asBlack: { games: number; wins: number; losses: number; draws: number };
+    asWhite: { games: number; wins: number; losses: number; draws: number; gameIds: string[] };
+    asBlack: { games: number; wins: number; losses: number; draws: number; gameIds: string[] };
 }
 
 export interface AnalyzedGame extends Game {
@@ -41,17 +41,13 @@ export function processGames(games: Game[]): { positionMap: Map<string, Position
             }
 
             // Extract Opening Info (if available from PGN headers)
-            // Lichess PGNs usually have 'Opening' header
             const openingName = chess.header()['Opening'] || 'Unknown Opening';
-
-            // Normalize opening name (e.g., remove specific variation to group broader openings if desired)
-            // For now, let's keep the full name but maybe strip ECO code if preferred.
 
             if (!openingStats.has(openingName)) {
                 openingStats.set(openingName, {
                     name: openingName,
-                    asWhite: { games: 0, wins: 0, losses: 0, draws: 0 },
-                    asBlack: { games: 0, wins: 0, losses: 0, draws: 0 }
+                    asWhite: { games: 0, wins: 0, losses: 0, draws: 0, gameIds: [] },
+                    asBlack: { games: 0, wins: 0, losses: 0, draws: 0, gameIds: [] }
                 });
             }
 
@@ -60,6 +56,7 @@ export function processGames(games: Game[]): { positionMap: Map<string, Position
             const statGroup = isWhite ? stats.asWhite : stats.asBlack;
 
             statGroup.games++;
+            statGroup.gameIds.push(game.id);
             if (game.result === '1-0') isWhite ? statGroup.wins++ : statGroup.losses++;
             else if (game.result === '0-1') isWhite ? statGroup.losses++ : statGroup.wins++;
             else statGroup.draws++;

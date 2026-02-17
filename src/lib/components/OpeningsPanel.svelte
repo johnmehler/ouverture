@@ -1,6 +1,8 @@
 <script lang="ts">
-    import { openings } from "$lib/store";
+    import { openings, games } from "$lib/store";
     import { derived } from "svelte/store";
+    import GameList from "$lib/components/GameList.svelte";
+    import type { OpeningStats } from "$lib/chess/analysis";
 
     // Get top 10 openings sorted by total games played
     const topOpenings = derived(openings, ($ops) => {
@@ -14,9 +16,27 @@
             .slice(0, 10);
     });
 
+    let selectedOpening: OpeningStats | null = $state(null);
+    let selectedGames = $derived.by(() => {
+        if (!selectedOpening) return [];
+        const ids = new Set([
+            ...selectedOpening.asWhite.gameIds,
+            ...selectedOpening.asBlack.gameIds,
+        ]);
+        return $games.filter((g) => ids.has(g.id));
+    });
+
     function getWinRate(wins: number, total: number) {
         if (total === 0) return 0;
         return Math.round((wins / total) * 100);
+    }
+
+    function selectOpening(op: OpeningStats) {
+        selectedOpening = op;
+    }
+
+    function closeList() {
+        selectedOpening = null;
     }
 </script>
 
@@ -26,7 +46,9 @@
 
         <div class="openings-list">
             {#each $topOpenings as op}
-                <div class="opening-item">
+                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="opening-item" onclick={() => selectOpening(op)}>
                     <div class="opening-header">
                         <span class="opening-name">{op.name}</span>
                         <span class="total-games"
@@ -83,6 +105,22 @@
     </div>
 {/if}
 
+{#if selectedOpening}
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="modal-overlay" onclick={closeList}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="modal-content" onclick={(e) => e.stopPropagation()}>
+            <GameList
+                games={selectedGames}
+                title={selectedOpening.name}
+                onClose={closeList}
+            />
+        </div>
+    </div>
+{/if}
+
 <style>
     .openings-panel {
         background: rgba(20, 20, 30, 0.6);
@@ -109,11 +147,20 @@
         gap: 0.5rem;
         padding-bottom: 1rem;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        cursor: pointer;
+        padding: 0.75rem;
+        margin: -0.5rem;
+        border-radius: var(--radius-sm);
+        transition: background 0.15s ease;
+    }
+
+    .opening-item:hover {
+        background: rgba(255, 255, 255, 0.05);
     }
 
     .opening-item:last-child {
         border-bottom: none;
-        padding-bottom: 0;
+        padding-bottom: 0.75rem;
     }
 
     .opening-header {
@@ -155,7 +202,7 @@
 
     .bar-fill {
         height: 100%;
-        background: var(--color-secondary); /* or green for wins? */
+        background: var(--color-secondary);
         border-radius: 3px;
     }
 
@@ -164,5 +211,28 @@
         text-align: right;
         font-variant-numeric: tabular-nums;
         color: var(--color-text-main);
+    }
+
+    /* Modal */
+    .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .modal-content {
+        background: var(--color-surface);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 900px;
+        max-height: 80vh;
+        overflow-y: auto;
     }
 </style>

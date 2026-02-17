@@ -74,6 +74,8 @@ export async function fetchLichessGames(
                         result: data.winner ? (data.winner === 'white' ? '1-0' : '0-1') : '1/2-1/2',
                         playerColor: isWhite ? 'white' : 'black',
                         myRating: isWhite ? data.players?.white?.rating : data.players?.black?.rating,
+                        opponentName: isWhite ? blackName : whiteName,
+                        opponentRating: isWhite ? data.players?.black?.rating : data.players?.white?.rating,
                         moves: [] as string[]
                     });
 
@@ -107,6 +109,8 @@ export async function fetchLichessGames(
                         result: data.winner ? (data.winner === 'white' ? '1-0' : '0-1') : '1/2-1/2',
                         playerColor: isWhite ? 'white' : 'black',
                         myRating: isWhite ? data.players?.white?.rating : data.players?.black?.rating,
+                        opponentName: isWhite ? blackName : whiteName,
+                        opponentRating: isWhite ? data.players?.black?.rating : data.players?.white?.rating,
                         moves: []
                     });
                 }

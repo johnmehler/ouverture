@@ -43,7 +43,8 @@
         />
 
         <div class="time-controls">
-            {#each Object.keys(timeControls) as tc}
+            {#each Object.keys(timeControls) as key}
+                {@const tc = key as keyof typeof timeControls}
                 <label class="tc-checkbox" class:active={timeControls[tc]}>
                     <input type="checkbox" bind:checked={timeControls[tc]} />
                     {tc.charAt(0).toUpperCase() + tc.slice(1)}
@@ -58,7 +59,7 @@
         >
             {#if $isScanning}
                 <Loader2 class="animate-spin mr-2" size={20} />
-                Scanning... ({$progress.fetched})
+                Scanning...
             {:else}
                 <Search class="mr-2" size={20} />
                 Analyze Games
