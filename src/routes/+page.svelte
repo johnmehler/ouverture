@@ -1,8 +1,9 @@
 <script lang="ts">
     import Scanner from "$lib/components/Scanner.svelte";
     import Dashboard from "$lib/components/Dashboard.svelte";
+    import GameReview from "$lib/components/GameReview.svelte";
     import OpeningsPanel from "$lib/components/OpeningsPanel.svelte";
-    import { positions, isScanning, progress } from "$lib/store";
+    import { positions, isScanning, progress, selectedGame } from "$lib/store";
     import { fade, fly } from "svelte/transition";
 
     let hasStarted = $derived(
@@ -33,12 +34,16 @@
 
             {#if hasStarted}
                 <div in:fly={{ y: 20, duration: 600, delay: 300 }}>
-                    <Dashboard />
+                    {#if $selectedGame}
+                        <GameReview />
+                    {:else}
+                        <Dashboard />
+                    {/if}
                 </div>
             {/if}
         </div>
 
-        {#if hasStarted}
+        {#if hasStarted && !$selectedGame}
             <aside
                 class="sidebar"
                 in:fly={{ x: 20, duration: 600, delay: 400 }}

@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { Game } from "$lib/types";
+    import { selectedGame } from "$lib/store";
     import { X } from "lucide-svelte";
 
     let {
@@ -33,6 +34,11 @@
             year: "numeric",
         });
     }
+
+    function openGame(game: Game) {
+        selectedGame.set(game);
+        onClose();
+    }
 </script>
 
 <div class="game-list-container">
@@ -48,12 +54,7 @@
 
     <div class="game-list">
         {#each games as game}
-            <a
-                href={game.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                class="game-card"
-            >
+            <button class="game-card" onclick={() => openGame(game)}>
                 <div class="game-players">
                     <div class="player-row">
                         <span class="piece-icon"
@@ -80,7 +81,7 @@
                     >
                     <span class="game-date">{formatDate(game.date)}</span>
                 </div>
-            </a>
+            </button>
         {/each}
     </div>
 </div>
@@ -141,6 +142,10 @@
         border-radius: var(--radius-md);
         text-decoration: none;
         color: inherit;
+        font: inherit;
+        width: 100%;
+        cursor: pointer;
+        text-align: left;
         transition:
             background 0.15s,
             border-color 0.15s;
