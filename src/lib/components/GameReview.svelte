@@ -5,7 +5,7 @@
         isAnalyzingGame,
         gameAnalysisProgress,
     } from "$lib/store";
-    import MistakeCard from "$lib/components/MistakeCard.svelte";
+    import PuzzleView from "$lib/components/PuzzleView.svelte";
     import { analyzeGameForMistakes } from "$lib/chess/review";
     import { ArrowLeft, Loader2 } from "lucide-svelte";
     import { onMount } from "svelte";
@@ -103,23 +103,7 @@
                 </p>
             </div>
         {:else}
-            <div class="mistakes-header">
-                <h3>
-                    {$gameMistakes.length} Mistake{$gameMistakes.length !== 1
-                        ? "s"
-                        : ""} Found
-                </h3>
-                <p>
-                    Positions where your move dropped the evaluation by more
-                    than 1 pawn.
-                </p>
-            </div>
-
-            <div class="mistakes-grid">
-                {#each $gameMistakes as mistake}
-                    <MistakeCard {mistake} />
-                {/each}
-            </div>
+            <PuzzleView mistakes={$gameMistakes} />
         {/if}
     </div>
 {/if}
@@ -273,25 +257,5 @@
     .no-mistakes p {
         color: var(--color-text-muted);
         margin: 0;
-    }
-
-    .mistakes-header {
-        text-align: center;
-    }
-
-    .mistakes-header h3 {
-        margin-bottom: 0.25rem;
-    }
-
-    .mistakes-header p {
-        font-size: 0.9rem;
-        color: var(--color-text-muted);
-        margin: 0;
-    }
-
-    .mistakes-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-        gap: 1.5rem;
     }
 </style>
