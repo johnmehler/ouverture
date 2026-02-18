@@ -42,6 +42,17 @@
             feedback !== "correct",
     );
 
+    // Intro animation — show opponent's last move when puzzle loads
+    let currentIntroMove = $derived.by(() => {
+        const p = mistakes[currentIndex];
+        if (p && p.lastOpponentMove && p.preMoveFen && p.preMoveFen !== p.fen) {
+            const from = p.lastOpponentMove.slice(0, 2);
+            const to = p.lastOpponentMove.slice(2, 4);
+            return { preMoveFen: p.preMoveFen, from, to };
+        }
+        return null;
+    });
+
     // Stockfish evaluation
     let sfWorker: Worker | null = null;
     let evaluating = $state(false);
@@ -197,6 +208,7 @@
                     interactive={boardInteractive}
                     {pendingMove}
                     onMoveApplied={handleMoveApplied}
+                    introMove={currentIntroMove}
                 />
             {/key}
         </div>

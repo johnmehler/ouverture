@@ -20,6 +20,8 @@
         interactive: boolean;
         pendingMove?: { from: string; to: string; promotion?: string } | null;
         onMoveApplied?: (san: string) => void;
+        introMove?: { preMoveFen: string; from: string; to: string } | null;
+        lastMoveSquares?: [string, string] | null;
     }
 
     let {
@@ -29,16 +31,17 @@
         interactive,
         pendingMove = null,
         onMoveApplied,
+        introMove = null,
+        lastMoveSquares = null,
     }: Props = $props();
 
     let boardEl: HTMLElement;
     let ground: Api | null = null;
-
-    // NOT reactive ($state) — Chess instance is internal engine state,
-    // not UI state. Making it $state causes infinite effect loops because
-    // chess.move() mutates the proxied object, re-triggering every effect
-    // that reads it.
+    // Intentional: component is re-mounted via {#key} when puzzle changes,
+    // so capturing the initial fen is correct.
+    // eslint-disable-next-line
     let chess = new Chess(fen);
+    let introPlayed = false;
 
     function toDests(): Map<Key, Key[]> {
         const dests = new Map<Key, Key[]>();
@@ -54,17 +57,29 @@
         return chess.turn() === "w" ? "white" : "black";
     }
 
-    function syncBoard() {
+    function syncPosition() {
         if (!ground) return;
         ground.set({
             fen: chess.fen(),
             orientation: orientation,
             turnColor: turnColor(),
+            lastMove: lastMoveSquares
+                ? [lastMoveSquares[0] as Key, lastMoveSquares[1] as Key]
+                : undefined,
             movable: {
                 free: false,
                 color: interactive ? orientation : undefined,
                 dests: interactive ? toDests() : new Map(),
             },
+            check: chess.isCheck(),
+        });
+    }
+
+    function lockBoard() {
+        if (!ground) return;
+        ground.set({
+            turnColor: turnColor(),
+            movable: { free: false, color: undefined, dests: new Map() },
             check: chess.isCheck(),
         });
     }
@@ -89,45 +104,91 @@
                 promotion: promotion as any,
             });
             if (result) {
-                syncBoard();
+                // Do NOT call syncPosition() here — chessground already
+                // shows the piece in its new square from the drag.
+                // Just lock the board so no further moves are allowed
+                // while the engine evaluates.
+                lockBoard();
                 onUserMove(orig, dest, result.san, promotion);
             }
         } catch {
-            syncBoard();
+            // Invalid move — reset board to current chess position
+            syncPosition();
         }
     }
 
     onMount(() => {
         if (!boardEl) return;
 
+        // If we have an intro move, start from the pre-move position
+        const shouldPlayIntro =
+            introMove && introMove.preMoveFen && introMove.from && introMove.to;
+        const initialFen = shouldPlayIntro
+            ? introMove!.preMoveFen
+            : chess.fen();
+        const initialChess = shouldPlayIntro
+            ? new Chess(introMove!.preMoveFen)
+            : chess;
+
         ground = Chessground(boardEl, {
-            fen: chess.fen(),
+            fen: initialFen,
             orientation: orientation,
-            turnColor: turnColor(),
-            animation: { enabled: true, duration: 200 },
+            turnColor: initialChess.turn() === "w" ? "white" : "black",
+            animation: { enabled: true, duration: 300 },
             movable: {
                 free: false,
-                color: interactive ? orientation : undefined,
-                dests: interactive ? toDests() : new Map(),
+                color: undefined, // locked initially during intro
+                dests: new Map(),
                 events: {
                     after: handleMove,
                 },
             },
             draggable: { enabled: true },
             premovable: { enabled: false },
-            check: chess.isCheck(),
+            check: initialChess.isCheck(),
         });
+
+        // Play intro animation after a short delay
+        if (shouldPlayIntro && !introPlayed) {
+            introPlayed = true;
+            setTimeout(() => {
+                if (!ground) return;
+                // Set the post-move position — chessground will animate the difference
+                const from = introMove!.from as Key;
+                const to = introMove!.to as Key;
+                ground.set({
+                    fen: chess.fen(), // puzzle position (after opponent's move)
+                    turnColor: turnColor(),
+                    lastMove: [from, to],
+                    check: chess.isCheck(),
+                });
+                // After animation finishes, enable interaction
+                setTimeout(() => {
+                    if (!ground) return;
+                    ground.set({
+                        movable: {
+                            free: false,
+                            color: interactive ? orientation : undefined,
+                            dests: interactive ? toDests() : new Map(),
+                        },
+                    });
+                }, 350);
+            }, 400);
+        } else {
+            // No intro — set up normally
+            syncPosition();
+        }
 
         return () => {
             ground?.destroy();
         };
     });
 
-    // React to fen changes (puzzle navigation)
+    // React to fen changes (puzzle navigation via {#key})
     $effect(() => {
         if (ground && fen) {
             chess = new Chess(fen);
-            syncBoard();
+            syncPosition();
         }
     });
 
@@ -154,7 +215,7 @@
                     promotion: pendingMove.promotion as any,
                 });
                 if (result) {
-                    syncBoard();
+                    syncPosition();
                     onMoveApplied?.(result.san);
                 }
             } catch {

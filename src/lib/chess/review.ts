@@ -97,6 +97,10 @@ export async function analyzeGameForMistakes(game: Game): Promise<void> {
 
                 mistakes.push({
                     fen: fens[i],
+                    preMoveFen: i > 0 ? fens[i - 1] : fens[i],
+                    lastOpponentMove: i > 0
+                        ? history[i - 1].from + history[i - 1].to + (history[i - 1].promotion ?? '')
+                        : '',
                     moveNumber: Math.floor(i / 2) + 1,
                     userMove: move.san,
                     userMoveLan: move.from + move.to,

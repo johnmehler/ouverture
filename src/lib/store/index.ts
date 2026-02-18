@@ -24,13 +24,15 @@ export const progress = writable({
 
 // Game review
 export interface Mistake {
-    fen: string;             // Position before the user's move
+    fen: string;             // Position before the user's move (puzzle position)
+    preMoveFen: string;      // Position before opponent's last move (for intro animation)
+    lastOpponentMove: string; // LAN of opponent's move leading to this position (e.g. "e7e5")
     moveNumber: number;      // Full move number (e.g. 12)
     userMove: string;        // SAN of the user's move (e.g. "Nf3")
     userMoveLan: string;     // LAN of the user's move (e.g. "g1f3") for arrow drawing
     bestMove: string;        // LAN of the engine's best move
     bestMoveSan: string;     // SAN of the engine's best move
-    acceptableMoves: string[]; // LANs within 0.2 pawns of best (good enough moves)
+    acceptableMoves: string[]; // LANs within margin of best (good enough moves)
     evalBefore: number;      // Eval (in pawns) before user's move
     evalAfter: number;       // Eval after user's move
     evalDrop: number;        // How much eval dropped (always positive)
