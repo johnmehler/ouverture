@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { onMount } from "svelte";
+    import { onMount, untrack } from "svelte";
     import { Chessground } from "chessground";
     import { type Api } from "chessground/api";
     import type { Key } from "chessground/types";
@@ -38,7 +38,7 @@
     // Intentional: component is re-mounted via {#key} when puzzle changes,
     // so capturing the initial fen is correct.
     // eslint-disable-next-line
-    let chess = new Chess(fen);
+    let chess = new Chess(untrack(() => fen));
     let introPlayed = false;
     // Guard to prevent effects from touching the board while a user move is settling
     let moveLocked = false;

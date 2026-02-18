@@ -14,7 +14,7 @@
         RotateCcw,
         Loader2,
     } from "lucide-svelte";
-    import { onMount, onDestroy } from "svelte";
+    import { onMount, onDestroy, untrack } from "svelte";
 
     interface Props {
         mistakes: Mistake[];
@@ -25,11 +25,11 @@
     let currentIndex = $state(0);
     let puzzle = $derived(mistakes[currentIndex]);
     let feedback = $state<"correct" | "incorrect" | "best" | null>(null);
-    let solved = $state<boolean[]>(new Array(mistakes.length).fill(false));
+    let solved = $state<boolean[]>(new Array(untrack(() => mistakes.length)).fill(false));
     let moveHistory = $state<{ san: string; color: "w" | "b" }[]>([]);
     let showingAnswer = $state(false);
     let boardKey = $state(0); // forces board re-mount
-    let boardFen = $state(mistakes[0]?.fen ?? "start");
+    let boardFen = $state(untrack(() => mistakes[0]?.fen ?? "start"));
     let pendingMove = $state<{
         from: string;
         to: string;

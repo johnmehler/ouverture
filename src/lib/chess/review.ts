@@ -1,4 +1,5 @@
 import { Chess } from 'chess.js';
+import { base } from '$app/paths';
 import type { Game } from '$lib/types';
 import type { Mistake } from '$lib/store';
 import { gameMistakes, isAnalyzingGame, gameAnalysisProgress } from '$lib/store';
@@ -156,7 +157,7 @@ async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number
  * Create a Stockfish WASM worker from local static files.
  */
 export async function createStockfishWorker(): Promise<Worker> {
-    const worker = new Worker('/stockfish/stockfish-18-lite-single.js');
+    const worker = new Worker(`${base}/stockfish/stockfish-18-lite-single.js`);
 
     await new Promise<void>((resolve) => {
         const handler = (e: MessageEvent) => {

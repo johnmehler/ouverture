@@ -1,5 +1,6 @@
 import { positions, progress, analysisQueue } from '$lib/store';
 import { get } from 'svelte/store';
+import { base } from '$app/paths';
 import StockfishWorker from '$lib/workers/stockfish.worker?worker';
 
 let worker: Worker | null = null;
@@ -51,7 +52,7 @@ function initWorker() {
     };
 
     // Kick off initialization (fetch stockfish from CDN)
-    worker.postMessage({ type: 'init' });
+    worker.postMessage({ type: 'init', base });
 }
 
 export async function startAnalysis() {

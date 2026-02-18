@@ -5,11 +5,16 @@
 
 let sfWorker: Worker | null = null;
 let currentFen = '';
+let basePath = '';
 
-function initEngine() {
+
+
+function initEngine(newBase?: string) {
+    if (newBase !== undefined) basePath = newBase;
     // Stockfish 18 WASM (single-threaded, lite) served from /static/stockfish/
     // The .wasm file is loaded automatically by the JS relative to its own URL.
-    sfWorker = new Worker('/stockfish/stockfish-18-lite-single.js');
+    const path = `${basePath}/stockfish/stockfish-18-lite-single.js`;
+    sfWorker = new Worker(path);
 
     sfWorker.onmessage = (event) => {
         const line = typeof event.data === 'string' ? event.data : String(event.data);
@@ -32,10 +37,10 @@ function initEngine() {
 }
 
 self.onmessage = (e) => {
-    const { type, fen, depth } = e.data;
+    const { type, fen, depth, base } = e.data;
 
     if (type === 'init') {
-        initEngine();
+        initEngine(base);
         return;
     }
 
