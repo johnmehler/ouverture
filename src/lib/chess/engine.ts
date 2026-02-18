@@ -4,16 +4,26 @@ import StockfishWorker from '$lib/workers/stockfish.worker?worker';
 
 let worker: Worker | null = null;
 let isAnalyzing = false;
+let workerReady = false;
+let pendingStart = false;
 
 // Initialize worker
 function initWorker() {
     if (worker) return;
 
-    // Vite handles ?worker import correctly
     worker = new StockfishWorker();
 
     worker.onmessage = (event) => {
-        const { type, fen, bestMove, score } = event.data;
+        const { type, fen, bestMove } = event.data;
+
+        if (type === 'ready') {
+            workerReady = true;
+            if (pendingStart) {
+                pendingStart = false;
+                processNext();
+            }
+            return;
+        }
 
         if (type === 'result') {
             // Update position map
@@ -22,8 +32,8 @@ function initWorker() {
                 if (node) {
                     node.engineEval = {
                         bestMove,
-                        depth: 14, // Hardcoded for now or passed back
-                        cp: score // if available
+                        depth: 14,
+                        cp: undefined
                     };
                 }
                 return map;
@@ -39,13 +49,21 @@ function initWorker() {
             processNext();
         }
     };
+
+    // Kick off initialization (fetch stockfish from CDN)
+    worker.postMessage({ type: 'init' });
 }
 
 export async function startAnalysis() {
     if (isAnalyzing) return;
-    initWorker();
     isAnalyzing = true;
-    processNext();
+    initWorker();
+
+    if (workerReady) {
+        processNext();
+    } else {
+        pendingStart = true;
+    }
 }
 
 function processNext() {
@@ -56,26 +74,22 @@ function processNext() {
         return;
     }
 
-    // Take one item
-    // Note: This is simple FIFO.
-    // Ideally, prioritize by frequency or importance.
     const fen = queue[0];
-
-    // Remove from queue in store
     analysisQueue.update(q => q.slice(1));
 
-    if (worker) {
-        // Send to worker
+    if (worker && workerReady) {
         worker.postMessage({
             type: 'analyze',
             fen,
-            depth: 14 // Analysis depth
+            depth: 14
         });
     }
 }
 
 export function stopAnalysis() {
     isAnalyzing = false;
+    workerReady = false;
+    pendingStart = false;
     if (worker) {
         worker.terminate();
         worker = null;

@@ -4,9 +4,7 @@ import { games, positions, isScanning, progress, user, analysisQueue, openings }
 import { startAnalysis } from '$lib/chess/engine';
 import type { ChessPlatform } from '$lib/types';
 
-const MAX_GAMES = 300;
-
-export async function startScan(targetUsername: string, platform: ChessPlatform = 'lichess', perfType?: string) {
+export async function startScan(targetUsername: string, platform: ChessPlatform = 'lichess', perfType?: string, limit: number = 100) {
     if (!targetUsername) return;
 
     isScanning.set(true);
@@ -18,7 +16,8 @@ export async function startScan(targetUsername: string, platform: ChessPlatform 
     user.set({ username: targetUsername, platform: 'lichess' });
 
     try {
-        const options = { username: targetUsername, limit: MAX_GAMES, perfType };
+        const options = { username: targetUsername, limit, perfType };
+
 
         // Only Lichess supported now
         const fetchedGames = await fetchLichessGames(options, (count) => {

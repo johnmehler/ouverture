@@ -14,6 +14,10 @@
         classical: false,
     });
 
+    // Game count options
+    const gameLimitOptions = [25, 50, 100, 200, 300] as const;
+    let gameLimit = $state<number>(100);
+
     async function handleScan() {
         if (!username) return;
 
@@ -26,7 +30,7 @@
         // If none selected, default to blitz/rapid
         const perfType = selected || "blitz,rapid";
 
-        await startScan(username, platform, perfType);
+        await startScan(username, platform, perfType, gameLimit);
     }
 
     // eslint-disable-next-line
@@ -52,6 +56,21 @@
             {/each}
         </div>
 
+        <div class="game-limit-section">
+            <span class="limit-label">Games to import</span>
+            <div class="limit-options">
+                {#each gameLimitOptions as opt}
+                    <button
+                        class="limit-btn"
+                        class:active={gameLimit === opt}
+                        onclick={() => (gameLimit = opt)}
+                    >
+                        {opt}
+                    </button>
+                {/each}
+            </div>
+        </div>
+
         <button
             class="btn btn-primary w-full"
             onclick={handleScan}
@@ -62,7 +81,7 @@
                 Scanning...
             {:else}
                 <Search class="mr-2" size={20} />
-                Analyze Games
+                Analyze {gameLimit} Games
             {/if}
         </button>
     </div>
@@ -71,7 +90,7 @@
         <div class="progress-container">
             <div class="status-message">
                 {#if $isScanning}
-                    Fetching games... {$progress.fetched} / 300
+                    Fetching games... {$progress.fetched} / {gameLimit}
                 {:else}
                     Analysis Complete
                 {/if}
@@ -80,7 +99,7 @@
                 <div class="progress-bar">
                     <div
                         class="progress-fill"
-                        style="width: {($progress.fetched / 300) * 100}%"
+                        style="width: {($progress.fetched / gameLimit) * 100}%"
                     ></div>
                 </div>
             {/if}
@@ -109,14 +128,12 @@
 
         border: 1px solid rgba(255, 255, 255, 0.1);
         background: rgba(20, 20, 30, 0.6);
-        /* transition: all 0.5s ease; removed complex transition */
     }
 
     /* Hero State (Centered, Large) */
     .scanner-container.hero {
-        padding: 4rem 3rem;
+        padding: 3rem 3rem;
         max-width: 500px;
-        aspect-ratio: 1; /* Square */
         margin: 0 auto;
 
         border: 2px solid #c0c0c0;
@@ -158,6 +175,62 @@
     .hero .btn {
         font-size: 1.2rem;
         padding: 1rem;
+    }
+
+    /* Game limit selector */
+    .game-limit-section {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .limit-label {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+
+    .limit-options {
+        display: flex;
+        gap: 0.35rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .limit-btn {
+        padding: 0.35rem 0.85rem;
+        border-radius: var(--radius-md);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: var(--color-text-muted);
+        cursor: pointer;
+        font: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        transition: all 0.15s;
+    }
+
+    .limit-btn:hover {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .limit-btn.active {
+        background: var(--color-primary);
+        border-color: var(--color-primary);
+        color: white;
+    }
+
+    .hero .limit-label {
+        font-size: 0.9rem;
+    }
+
+    .hero .limit-btn {
+        padding: 0.5rem 1.1rem;
+        font-size: 1rem;
     }
 
     .progress-container {
@@ -226,7 +299,7 @@
     .tc-checkbox.active {
         background: var(--color-primary);
         border-color: var(--color-primary);
-        color: white; /* Ensure text is readable */
+        color: white;
     }
 
     .hero .time-controls {

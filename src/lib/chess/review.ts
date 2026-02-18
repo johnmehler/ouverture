@@ -152,7 +152,7 @@ async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number
 /**
  * Create a Stockfish worker from CDN via fetch + blob URL.
  */
-async function createStockfishWorker(): Promise<Worker> {
+export async function createStockfishWorker(): Promise<Worker> {
     const resp = await fetch(SF_URL);
     const text = await resp.text();
     const blob = new Blob([text], { type: 'application/javascript' });
@@ -180,7 +180,7 @@ async function createStockfishWorker(): Promise<Worker> {
 /**
  * Evaluate a single FEN position. Returns score in pawns + bestmove LAN.
  */
-function evaluateSinglePosition(worker: Worker, fen: string, depth: number): Promise<{ score: number; bestMove: string }> {
+export function evaluateSinglePosition(worker: Worker, fen: string, depth: number): Promise<{ score: number; bestMove: string }> {
     return new Promise((resolve) => {
         let score = 0;
         let bestMove = '';

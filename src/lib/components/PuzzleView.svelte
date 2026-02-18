@@ -2,12 +2,19 @@
     import PuzzleBoard from "$lib/components/PuzzleBoard.svelte";
     import type { Mistake } from "$lib/store";
     import {
+        createStockfishWorker,
+        evaluateSinglePosition,
+    } from "$lib/chess/review";
+    import { Chess } from "chess.js";
+    import {
         ChevronLeft,
         ChevronRight,
         Check,
         X,
         RotateCcw,
+        Loader2,
     } from "lucide-svelte";
+    import { onMount, onDestroy } from "svelte";
 
     interface Props {
         mistakes: Mistake[];
@@ -21,6 +28,7 @@
     let solved = $state<boolean[]>(new Array(mistakes.length).fill(false));
     let moveHistory = $state<{ san: string; color: "w" | "b" }[]>([]);
     let showingAnswer = $state(false);
+    let boardKey = $state(0); // forces board re-mount
     let boardFen = $state(mistakes[0]?.fen ?? "start");
     let pendingMove = $state<{
         from: string;
@@ -28,8 +36,29 @@
         promotion?: string;
     } | null>(null);
     let boardInteractive = $derived(
-        !showingAnswer && feedback !== "best" && feedback !== "correct",
+        !showingAnswer &&
+            !evaluating &&
+            feedback !== "best" &&
+            feedback !== "correct",
     );
+
+    // Stockfish evaluation
+    let sfWorker: Worker | null = null;
+    let evaluating = $state(false);
+    let moveEval = $state<number | null>(null); // eval of the user's move (from user perspective)
+
+    onMount(async () => {
+        try {
+            sfWorker = await createStockfishWorker();
+        } catch (e) {
+            console.error("Failed to create Stockfish worker for puzzles:", e);
+        }
+    });
+
+    onDestroy(() => {
+        sfWorker?.terminate();
+        sfWorker = null;
+    });
 
     function goTo(idx: number) {
         if (idx < 0 || idx >= mistakes.length) return;
@@ -38,11 +67,19 @@
         moveHistory = [];
         showingAnswer = false;
         pendingMove = null;
+        evaluating = false;
+        moveEval = null;
         boardFen = mistakes[idx].fen;
+        boardKey++; // force re-mount
     }
 
-    function handleUserMove(from: string, to: string, san: string) {
-        const moveLan = from + to;
+    async function handleUserMove(
+        from: string,
+        to: string,
+        san: string,
+        promotion?: string,
+    ) {
+        const moveLan = from + to + (promotion ?? "");
         const p = puzzle;
 
         moveHistory = [
@@ -53,11 +90,49 @@
             },
         ];
 
+        // Evaluate the resulting position with Stockfish
+        evaluating = true;
+        moveEval = null;
+
+        let userMoveEval: number | null = null;
+
+        if (sfWorker) {
+            try {
+                // Get the FEN after the user's move
+                const tempChess = new Chess(p.fen);
+                tempChess.move({ from, to, promotion: promotion as any });
+                const resultFen = tempChess.fen();
+
+                const result = await evaluateSinglePosition(
+                    sfWorker,
+                    resultFen,
+                    12,
+                );
+                // Result is from opponent's perspective, negate for user's perspective
+                userMoveEval = -result.score;
+                moveEval = userMoveEval;
+            } catch (e) {
+                console.error("Failed to evaluate move:", e);
+            }
+        }
+
+        evaluating = false;
+
+        // Determine feedback based on comparison with best move
+        // bestMove match = best, within 0.3 pawns of best = good, else incorrect
         if (moveLan === p.bestMove) {
             feedback = "best";
             solved[currentIndex] = true;
             solved = [...solved];
         } else if (p.acceptableMoves.includes(moveLan)) {
+            feedback = "correct";
+            solved[currentIndex] = true;
+            solved = [...solved];
+        } else if (
+            userMoveEval !== null &&
+            p.evalBefore - userMoveEval <= 0.3
+        ) {
+            // The move is close to the best eval even if not in our pre-computed list
             feedback = "correct";
             solved[currentIndex] = true;
             solved = [...solved];
@@ -71,7 +146,10 @@
         moveHistory = [];
         showingAnswer = false;
         pendingMove = null;
+        evaluating = false;
+        moveEval = null;
         boardFen = puzzle.fen;
+        boardKey++;
     }
 
     function showAnswer() {
@@ -111,14 +189,16 @@
     <!-- Main puzzle area -->
     <div class="puzzle-main">
         <div class="board-section">
-            <PuzzleBoard
-                fen={boardFen}
-                orientation={puzzle.playerColor}
-                onUserMove={handleUserMove}
-                interactive={boardInteractive}
-                {pendingMove}
-                onMoveApplied={handleMoveApplied}
-            />
+            {#key boardKey}
+                <PuzzleBoard
+                    fen={boardFen}
+                    orientation={puzzle.playerColor}
+                    onUserMove={handleUserMove}
+                    interactive={boardInteractive}
+                    {pendingMove}
+                    onMoveApplied={handleMoveApplied}
+                />
+            {/key}
         </div>
 
         <!-- Sidebar -->
@@ -180,34 +260,59 @@
             </div>
 
             <!-- Feedback -->
-            {#if feedback === "best"}
+            {#if evaluating}
+                <div class="feedback feedback-evaluating">
+                    <Loader2 class="animate-spin" size={16} />
+                    <span>Evaluating move...</span>
+                </div>
+            {:else if feedback === "best"}
                 <div class="feedback feedback-best">
                     <Check size={18} />
                     <span>Best move! <strong>{puzzle.bestMoveSan}</strong></span
                     >
+                    {#if moveEval !== null}
+                        <span class="eval-tag eval-good"
+                            >{formatEval(moveEval)}</span
+                        >
+                    {/if}
                 </div>
             {:else if feedback === "correct"}
                 <div class="feedback feedback-good">
                     <Check size={18} />
                     <span
-                        >Good move! Best was <strong
-                            >{puzzle.bestMoveSan}</strong
-                        ></span
-                    >
+                        >Good move!{#if moveEval !== null}
+                            <span class="eval-tag eval-ok"
+                                >{formatEval(moveEval)}</span
+                            >
+                        {/if}
+                        Best was <strong>{puzzle.bestMoveSan}</strong>
+                        <span class="eval-tag eval-good"
+                            >{formatEval(puzzle.evalBefore)}</span
+                        >
+                    </span>
                 </div>
             {:else if feedback === "incorrect"}
                 <div class="feedback feedback-wrong">
                     <X size={18} />
-                    <span>Not the best move. Try again!</span>
+                    <span>
+                        Not the best move.
+                        {#if moveEval !== null}
+                            <span class="eval-tag eval-bad"
+                                >{formatEval(moveEval)}</span
+                            >
+                        {/if}
+                    </span>
                 </div>
             {/if}
 
             {#if showingAnswer}
                 <div class="feedback feedback-answer">
                     <span
-                        >The best move was <strong>{puzzle.bestMoveSan}</strong
-                        ></span
-                    >
+                        >The best move was <strong>{puzzle.bestMoveSan}</strong>
+                        <span class="eval-tag eval-good"
+                            >{formatEval(puzzle.evalBefore)}</span
+                        >
+                    </span>
                 </div>
             {/if}
 
@@ -415,6 +520,13 @@
         border-radius: 8px;
         font-size: 0.9rem;
         font-weight: 500;
+        flex-wrap: wrap;
+    }
+
+    .feedback-evaluating {
+        background: rgba(139, 92, 246, 0.08);
+        color: var(--color-text-muted);
+        border: 1px solid rgba(139, 92, 246, 0.15);
     }
 
     .feedback-best {
@@ -443,6 +555,30 @@
 
     .feedback strong {
         font-family: "Courier New", monospace;
+    }
+
+    .eval-tag {
+        font-size: 0.8rem;
+        font-weight: 700;
+        font-family: "Courier New", monospace;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        margin-left: 0.15rem;
+    }
+
+    .eval-good {
+        background: rgba(74, 222, 128, 0.15);
+        color: #4ade80;
+    }
+
+    .eval-ok {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+    }
+
+    .eval-bad {
+        background: rgba(248, 113, 113, 0.15);
+        color: #f87171;
     }
 
     /* Actions */

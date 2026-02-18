@@ -11,7 +11,12 @@
     interface Props {
         fen: string;
         orientation: "white" | "black";
-        onUserMove: (from: string, to: string, san: string) => void;
+        onUserMove: (
+            from: string,
+            to: string,
+            san: string,
+            promotion?: string,
+        ) => void;
         interactive: boolean;
         pendingMove?: { from: string; to: string; promotion?: string } | null;
         onMoveApplied?: (san: string) => void;
@@ -28,7 +33,12 @@
 
     let boardEl: HTMLElement;
     let ground: Api | null = null;
-    let chess = $state(new Chess(fen));
+
+    // NOT reactive ($state) — Chess instance is internal engine state,
+    // not UI state. Making it $state causes infinite effect loops because
+    // chess.move() mutates the proxied object, re-triggering every effect
+    // that reads it.
+    let chess = new Chess(fen);
 
     function toDests(): Map<Key, Key[]> {
         const dests = new Map<Key, Key[]>();
@@ -80,7 +90,7 @@
             });
             if (result) {
                 syncBoard();
-                onUserMove(orig, dest, result.san);
+                onUserMove(orig, dest, result.san, promotion);
             }
         } catch {
             syncBoard();
