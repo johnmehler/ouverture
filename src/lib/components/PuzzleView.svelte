@@ -149,6 +149,14 @@
             solved = [...solved];
         } else {
             feedback = "incorrect";
+            // Auto-reset after a brief delay so the user sees their wrong move
+            setTimeout(() => {
+                moveHistory = [];
+                feedback = null;
+                moveEval = null;
+                boardFen = puzzle.fen;
+                boardKey++; // re-mount board to puzzle position
+            }, 1200);
         }
     }
 

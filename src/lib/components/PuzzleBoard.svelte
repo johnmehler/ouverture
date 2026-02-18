@@ -21,7 +21,6 @@
         pendingMove?: { from: string; to: string; promotion?: string } | null;
         onMoveApplied?: (san: string) => void;
         introMove?: { preMoveFen: string; from: string; to: string } | null;
-        lastMoveSquares?: [string, string] | null;
     }
 
     let {
@@ -32,7 +31,6 @@
         pendingMove = null,
         onMoveApplied,
         introMove = null,
-        lastMoveSquares = null,
     }: Props = $props();
 
     let boardEl: HTMLElement;
@@ -42,6 +40,8 @@
     // eslint-disable-next-line
     let chess = new Chess(fen);
     let introPlayed = false;
+    // Guard to prevent effects from touching the board while a user move is settling
+    let moveLocked = false;
 
     function toDests(): Map<Key, Key[]> {
         const dests = new Map<Key, Key[]>();
@@ -63,23 +63,11 @@
             fen: chess.fen(),
             orientation: orientation,
             turnColor: turnColor(),
-            lastMove: lastMoveSquares
-                ? [lastMoveSquares[0] as Key, lastMoveSquares[1] as Key]
-                : undefined,
             movable: {
                 free: false,
                 color: interactive ? orientation : undefined,
                 dests: interactive ? toDests() : new Map(),
             },
-            check: chess.isCheck(),
-        });
-    }
-
-    function lockBoard() {
-        if (!ground) return;
-        ground.set({
-            turnColor: turnColor(),
-            movable: { free: false, color: undefined, dests: new Map() },
             check: chess.isCheck(),
         });
     }
@@ -104,11 +92,31 @@
                 promotion: promotion as any,
             });
             if (result) {
-                // Do NOT call syncPosition() here — chessground already
-                // shows the piece in its new square from the drag.
-                // Just lock the board so no further moves are allowed
-                // while the engine evaluates.
-                lockBoard();
+                moveLocked = true;
+
+                // Update chessground's internal state to the NEW position
+                // with animation DISABLED so there's no visual snap.
+                // Chessground already shows the piece at its destination from
+                // the drag — this just syncs its internal FEN to match.
+                ground!.set({
+                    animation: { enabled: false },
+                });
+                ground!.set({
+                    fen: chess.fen(),
+                    turnColor: turnColor(),
+                    lastMove: [orig, dest],
+                    movable: {
+                        free: false,
+                        color: undefined,
+                        dests: new Map(),
+                    },
+                    check: chess.isCheck(),
+                });
+                // Re-enable animation for future moves
+                ground!.set({
+                    animation: { enabled: true, duration: 300 },
+                });
+
                 onUserMove(orig, dest, result.san, promotion);
             }
         } catch {
@@ -153,11 +161,10 @@
             introPlayed = true;
             setTimeout(() => {
                 if (!ground) return;
-                // Set the post-move position — chessground will animate the difference
                 const from = introMove!.from as Key;
                 const to = introMove!.to as Key;
                 ground.set({
-                    fen: chess.fen(), // puzzle position (after opponent's move)
+                    fen: chess.fen(),
                     turnColor: turnColor(),
                     lastMove: [from, to],
                     check: chess.isCheck(),
@@ -175,7 +182,6 @@
                 }, 350);
             }, 400);
         } else {
-            // No intro — set up normally
             syncPosition();
         }
 
@@ -188,18 +194,21 @@
     $effect(() => {
         if (ground && fen) {
             chess = new Chess(fen);
+            moveLocked = false;
             syncPosition();
         }
     });
 
-    // React to interactive prop changes
+    // React to interactive prop changes — but NOT during a locked move
     $effect(() => {
-        if (ground) {
+        // Read interactive to track it as a dependency
+        const isInteractive = interactive;
+        if (ground && !moveLocked) {
             ground.set({
                 movable: {
                     free: false,
-                    color: interactive ? orientation : undefined,
-                    dests: interactive ? toDests() : new Map(),
+                    color: isInteractive ? orientation : undefined,
+                    dests: isInteractive ? toDests() : new Map(),
                 },
             });
         }
@@ -208,6 +217,7 @@
     // React to pendingMove (for "show answer" functionality)
     $effect(() => {
         if (pendingMove && ground) {
+            moveLocked = false;
             try {
                 const result = chess.move({
                     from: pendingMove.from,
