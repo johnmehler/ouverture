@@ -5,7 +5,6 @@ import { gameMistakes, isAnalyzingGame, gameAnalysisProgress } from '$lib/store'
 
 const MISTAKE_THRESHOLD = 1.0; // Eval drop > 1.0 pawn = mistake
 const ACCEPTABLE_MARGIN = 0.2; // Moves within 0.2 pawns of best are acceptable
-const SF_URL = 'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.0/stockfish.js';
 
 /**
  * Analyze a single game by replaying it move-by-move with Stockfish.
@@ -154,14 +153,10 @@ async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number
 }
 
 /**
- * Create a Stockfish worker from CDN via fetch + blob URL.
+ * Create a Stockfish WASM worker from local static files.
  */
 export async function createStockfishWorker(): Promise<Worker> {
-    const resp = await fetch(SF_URL);
-    const text = await resp.text();
-    const blob = new Blob([text], { type: 'application/javascript' });
-    const url = URL.createObjectURL(blob);
-    const worker = new Worker(url);
+    const worker = new Worker('/stockfish/stockfish-18-lite-single.js');
 
     await new Promise<void>((resolve) => {
         const handler = (e: MessageEvent) => {

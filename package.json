@@ -23,6 +23,7 @@
 	"dependencies": {
 		"chess.js": "^1.4.0",
 		"chessground": "^9.2.1",
-		"lucide-svelte": "^0.564.0"
+		"lucide-svelte": "^0.564.0",
+		"stockfish": "^18.0.5"
 	}
 }
