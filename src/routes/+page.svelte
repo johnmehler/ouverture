@@ -19,6 +19,7 @@
     <main
         class="container"
         class:main-grid={hasStarted}
+        class:main-grid-full={hasStarted && !!$selectedGame}
         class:hero-container={!hasStarted}
     >
         <div class="main-content" class:w-full={!hasStarted}>
@@ -108,18 +109,29 @@
         width: fit-content;
     }
 
-    /* Grid Layout (Active) */
+    /* Grid Layout (Active — dashboard with sidebar) */
     .main-grid {
         display: grid;
         grid-template-columns: 1fr;
         gap: 2rem;
         width: 100%;
+        transition:
+            grid-template-columns 0.5s ease,
+            max-width 0.5s ease;
     }
 
     @media (min-width: 1024px) {
         .main-grid {
             grid-template-columns: 1fr 320px;
         }
+    }
+
+    /* Full-width centered layout (game review, no sidebar) */
+    .main-grid.main-grid-full {
+        grid-template-columns: 1fr;
+        max-width: 960px;
+        margin-left: auto;
+        margin-right: auto;
     }
 
     /* Hero Layout (Initial) */
@@ -147,7 +159,7 @@
     .main-content {
         display: flex;
         flex-direction: column;
-        gap: 2rem; /* Add gap between scanner and dashboard */
+        gap: 2rem;
     }
 
     .main-content.w-full {
