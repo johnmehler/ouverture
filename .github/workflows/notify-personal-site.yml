@@ -1,0 +1,17 @@
+name: Notify Personal Site
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger personal-site rebuild
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT_UPDATE_SUBSITES }}
+          repository: johnmehler/Website
+          event-type: subsite-updated
+          client-payload: '{"subsite": "ouverture"}'
