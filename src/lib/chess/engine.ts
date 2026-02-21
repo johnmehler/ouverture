@@ -52,6 +52,7 @@ function initWorker() {
     };
 
     // Kick off initialization (fetch stockfish from CDN)
+    console.log('Initializing Stockfish worker with base:', base);
     worker.postMessage({ type: 'init', base });
 }
 
