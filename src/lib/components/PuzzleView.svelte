@@ -201,6 +201,12 @@
 
     const formatEval = (val: number) =>
         Math.abs(val) >= 100 ? "#" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}`;
+
+    /** Convert a user-relative eval to absolute (white-relative) convention */
+    const toAbsEval = (val: number) =>
+        puzzle.playerColor === "white" ? val : -val;
+
+    const formatAbsEval = (val: number) => formatEval(toAbsEval(val));
 </script>
 
 <div class="puzzle-layout">
@@ -252,7 +258,7 @@
                         Played <span class="bad-move">{puzzle.userMove}</span>
                     </p>
                     <p class="eval-info">
-                        Eval: {formatEval(puzzle.evalBefore)} → {formatEval(
+                        Eval: {formatAbsEval(puzzle.evalBefore)} → {formatAbsEval(
                             puzzle.evalAfter,
                         )}
                         <span class="eval-drop-tag"
@@ -308,7 +314,7 @@
                         {#if moveEval !== null}<span
                                 class="eval-tag eval-{feedback === 'incorrect'
                                     ? 'bad'
-                                    : 'good'}">{formatEval(moveEval)}</span
+                                    : 'good'}">{formatAbsEval(moveEval)}</span
                             >{/if}
                     </div>
                 {/if}
@@ -326,7 +332,7 @@
                                 ></span
                             >
                             <span class="eval-tag eval-good"
-                                >{formatEval(puzzle.evalBefore)}</span
+                                >{formatAbsEval(puzzle.evalBefore)}</span
                             >
                         </div>
                         {#if otherGoodMoves.length > 0}
@@ -347,7 +353,9 @@
                                         <span
                                             class="eval-tag eval-good"
                                             style="margin-left: 0;"
-                                            >{formatEval(alt.evalScore)}</span
+                                            >{formatAbsEval(
+                                                alt.evalScore,
+                                            )}</span
                                         >
                                     </div>
                                 {/each}

@@ -11,6 +11,15 @@
         const sign = val >= 0 ? "+" : "";
         return `${sign}${val.toFixed(1)}`;
     }
+
+    /** Convert user-relative eval to absolute (white-relative) */
+    function toAbsEval(val: number): number {
+        return mistake.playerColor === "white" ? val : -val;
+    }
+
+    function formatAbsEval(val: number): string {
+        return formatEval(toAbsEval(val));
+    }
 </script>
 
 <div class="mistake-card card">
@@ -47,12 +56,16 @@
         <div class="eval-row">
             <div class="eval-chip before">
                 <span class="eval-label">Before</span>
-                <span class="eval-value">{formatEval(mistake.evalBefore)}</span>
+                <span class="eval-value"
+                    >{formatAbsEval(mistake.evalBefore)}</span
+                >
             </div>
             <span class="eval-arrow">→</span>
             <div class="eval-chip after">
                 <span class="eval-label">After</span>
-                <span class="eval-value">{formatEval(mistake.evalAfter)}</span>
+                <span class="eval-value"
+                    >{formatAbsEval(mistake.evalAfter)}</span
+                >
             </div>
         </div>
     </div>
