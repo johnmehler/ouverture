@@ -1,11 +1,27 @@
 import { fetchLichessGames } from '$lib/clients/lichess';
 import { processGames } from '$lib/chess/analysis';
 import { games, positions, isScanning, progress, user, analysisQueue, openings } from '$lib/store';
-import { startAnalysis } from '$lib/chess/engine';
+import { startAnalysis, stopAnalysis } from '$lib/chess/engine';
 import type { ChessPlatform } from '$lib/types';
+
+let scanController: AbortController | null = null;
+
+export function stopScan() {
+    if (scanController) {
+        scanController.abort();
+        scanController = null;
+    }
+    stopAnalysis();
+    isScanning.set(false);
+}
 
 export async function startScan(targetUsername: string, platform: ChessPlatform = 'lichess', perfType?: string, limit: number = 100) {
     if (!targetUsername) return;
+
+    if (scanController) {
+        scanController.abort();
+    }
+    scanController = new AbortController();
 
     isScanning.set(true);
     progress.set({ fetched: 0, analyzed: 0, total: 0, analyzeTotal: 0 });
@@ -16,8 +32,7 @@ export async function startScan(targetUsername: string, platform: ChessPlatform 
     user.set({ username: targetUsername, platform: 'lichess' });
 
     try {
-        const options = { username: targetUsername, limit, perfType };
-
+        const options = { username: targetUsername, limit, perfType, signal: scanController.signal };
 
         // Only Lichess supported now
         const fetchedGames = await fetchLichessGames(options, (count) => {
@@ -47,10 +62,17 @@ export async function startScan(targetUsername: string, platform: ChessPlatform 
         // Start engine analysis
         startAnalysis();
 
-    } catch (error) {
-        console.error('Scan failed:', error);
-        alert(`Error fetching games: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (error: any) {
+        if (error.name === 'AbortError') {
+            console.log('Scan aborted');
+        } else {
+            console.error('Scan failed:', error);
+            alert(`Error fetching games: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
     } finally {
+        if (scanController?.signal.aborted === false) {
+            scanController = null;
+        }
         isScanning.set(false);
     }
 }

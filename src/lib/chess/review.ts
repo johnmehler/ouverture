@@ -7,12 +7,31 @@ import { gameMistakes, isAnalyzingGame, gameAnalysisProgress } from '$lib/store'
 const MISTAKE_THRESHOLD = 1.0; // Eval drop > 1.0 pawn = mistake
 const ACCEPTABLE_MARGIN = 0.2; // Moves within 0.2 pawns of best are acceptable
 
+let reviewController: AbortController | null = null;
+let currentWorker: Worker | null = null;
+
+export function stopGameAnalysis() {
+    if (reviewController) {
+        reviewController.abort();
+        reviewController = null;
+    }
+    if (currentWorker) {
+        currentWorker.terminate();
+        currentWorker = null;
+    }
+    isAnalyzingGame.set(false);
+}
+
 /**
  * Analyze a single game by replaying it move-by-move with Stockfish.
  * Finds positions where the user's move caused the eval to drop by > MISTAKE_THRESHOLD.
  * For each mistake, also finds the best move and acceptable alternatives.
  */
 export async function analyzeGameForMistakes(game: Game): Promise<void> {
+    stopGameAnalysis(); // Cancel any existing
+    reviewController = new AbortController();
+    const signal = reviewController.signal;
+
     isAnalyzingGame.set(true);
     gameMistakes.set([]);
     gameAnalysisProgress.set({ current: 0, total: 0 });
@@ -41,6 +60,7 @@ export async function analyzeGameForMistakes(game: Game): Promise<void> {
     let sfWorker: Worker;
     try {
         sfWorker = await createStockfishWorker();
+        currentWorker = sfWorker;
     } catch (e) {
         console.error('Failed to create Stockfish worker:', e);
         isAnalyzingGame.set(false);
@@ -50,8 +70,9 @@ export async function analyzeGameForMistakes(game: Game): Promise<void> {
     // Evaluate all positions
     const evals: { score: number; bestMove: string }[] = [];
     for (let i = 0; i < fens.length; i++) {
+        if (signal.aborted) return;
         try {
-            evals.push(await evaluateSinglePosition(sfWorker, fens[i], 12));
+            evals.push(await evaluateSinglePosition(sfWorker, fens[i], 12, signal));
         } catch (e) {
             evals.push({ score: 0, bestMove: '' });
         }
@@ -93,7 +114,7 @@ export async function analyzeGameForMistakes(game: Game): Promise<void> {
                 } catch { /* keep LAN */ }
 
                 // Find acceptable moves (within ACCEPTABLE_MARGIN of best)
-                const acceptableMoves = await findAcceptableMoves(sfWorker, fens[i], userEvalBefore, ACCEPTABLE_MARGIN);
+                const acceptableMoves = await findAcceptableMoves(sfWorker, fens[i], userEvalBefore, ACCEPTABLE_MARGIN, signal);
 
                 mistakes.push({
                     fen: fens[i],
@@ -126,19 +147,20 @@ export async function analyzeGameForMistakes(game: Game): Promise<void> {
 /**
  * Find all legal moves that are within `margin` pawns of the best move's eval.
  */
-async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number, margin: number): Promise<string[]> {
+async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number, margin: number, signal?: AbortSignal): Promise<string[]> {
     const chess = new Chess(fen);
     const legalMoves = chess.moves({ verbose: true });
     const acceptable: string[] = [];
 
     // For each legal move, evaluate resulting position
     for (const move of legalMoves) {
+        if (signal?.aborted) break;
         const tempChess = new Chess(fen);
         tempChess.move(move);
         const resultFen = tempChess.fen();
 
         try {
-            const result = await evaluateSinglePosition(worker, resultFen, 10);
+            const result = await evaluateSinglePosition(worker, resultFen, 10, signal);
             // Result is from opponent's perspective, so negate
             const moveEval = -result.score;
 
@@ -180,8 +202,8 @@ export async function createStockfishWorker(): Promise<Worker> {
 /**
  * Evaluate a single FEN position. Returns score in pawns + bestmove LAN.
  */
-export function evaluateSinglePosition(worker: Worker, fen: string, depth: number): Promise<{ score: number; bestMove: string }> {
-    return new Promise((resolve) => {
+export function evaluateSinglePosition(worker: Worker, fen: string, depth: number, signal?: AbortSignal): Promise<{ score: number; bestMove: string }> {
+    return new Promise((resolve, reject) => {
         let score = 0;
         let bestMove = '';
 
@@ -201,10 +223,30 @@ export function evaluateSinglePosition(worker: Worker, fen: string, depth: numbe
 
             if (line.startsWith('bestmove')) {
                 bestMove = line.split(' ')[1] || '';
-                worker.removeEventListener('message', handler);
+                cleanup();
                 resolve({ score, bestMove });
             }
         };
+
+        const onAbort = () => {
+            cleanup();
+            reject(new Error('Aborted'));
+        };
+
+        const cleanup = () => {
+            worker.removeEventListener('message', handler);
+            if (signal) {
+                signal.removeEventListener('abort', onAbort);
+            }
+        };
+
+        if (signal) {
+            if (signal.aborted) {
+                reject(new Error('Aborted'));
+                return;
+            }
+            signal.addEventListener('abort', onAbort);
+        }
 
         worker.addEventListener('message', handler);
         worker.postMessage(`position fen ${fen}`);

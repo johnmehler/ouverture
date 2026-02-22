@@ -1,3 +1,4 @@
-1. When the user tries a move for the puzzles, the piece should stay where it is while the engine is thinking
-2. When a move is correct, the piece should stay where it is
-3. When a move is incorrect, the piece should move back to its original position
+1. When I click "show answer" after getting a puzzle wrong, there should be an animation of the piece moving to the correct square
+2. There should be a "retry" button after showing the answer
+3. The "show answer" button should be visible even before a guess is made
+4. The alternate correct answers should be more robust: three row layout with each option and their eval score

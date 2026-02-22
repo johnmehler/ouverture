@@ -1,7 +1,7 @@
 <script lang="ts">
-    import { startScan } from "$lib/chess/game";
+    import { startScan, stopScan } from "$lib/chess/game";
     import { isScanning, progress, user } from "$lib/store";
-    import { Search, Loader2 } from "lucide-svelte";
+    import { Search, Loader2, Square } from "lucide-svelte";
 
     let username = $state("");
     const platform = "lichess";
@@ -71,19 +71,32 @@
             </div>
         </div>
 
-        <button
-            class="btn btn-primary w-full"
-            onclick={handleScan}
-            disabled={$isScanning}
-        >
+        <div style="position: relative; width: 100%;">
+            <button
+                class="btn btn-primary w-full"
+                onclick={handleScan}
+                disabled={$isScanning}
+            >
+                {#if $isScanning}
+                    <Loader2 class="animate-spin mr-2" size={20} />
+                    Scanning...
+                {:else}
+                    <Search class="mr-2" size={20} />
+                    Analyze {gameLimit} Games
+                {/if}
+            </button>
+
             {#if $isScanning}
-                <Loader2 class="animate-spin mr-2" size={20} />
-                Scanning...
-            {:else}
-                <Search class="mr-2" size={20} />
-                Analyze {gameLimit} Games
+                <button
+                    class="stop-scan-btn"
+                    onclick={stopScan}
+                    title="Stop Scan"
+                >
+                    <Square fill="currentColor" size={14} />
+                    <span>Stop</span>
+                </button>
             {/if}
-        </button>
+        </div>
     </div>
 
     {#if $isScanning || $progress.total > 0}
@@ -175,6 +188,33 @@
     .hero .btn {
         font-size: 1.2rem;
         padding: 1rem;
+    }
+
+    .stop-scan-btn {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.8rem;
+        background: rgba(0, 0, 0, 0.2);
+        border: none;
+        border-radius: var(--radius-sm);
+        color: white;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+            background 0.2s,
+            color 0.2s;
+        z-index: 10;
+        pointer-events: auto;
+    }
+
+    .stop-scan-btn:hover {
+        background: rgba(220, 38, 38, 0.8);
     }
 
     /* Game limit selector */

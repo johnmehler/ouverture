@@ -6,11 +6,15 @@
         gameAnalysisProgress,
     } from "$lib/store";
     import PuzzleView from "$lib/components/PuzzleView.svelte";
-    import { analyzeGameForMistakes } from "$lib/chess/review";
-    import { ArrowLeft, Loader2 } from "lucide-svelte";
+    import {
+        analyzeGameForMistakes,
+        stopGameAnalysis,
+    } from "$lib/chess/review";
+    import { ArrowLeft, Loader2, Square } from "lucide-svelte";
     import { onMount } from "svelte";
 
     function goBack() {
+        stopGameAnalysis();
         selectedGame.set(null);
         gameMistakes.set([]);
     }
@@ -74,7 +78,15 @@
         </div>
 
         {#if $isAnalyzingGame}
-            <div class="analyzing-state card">
+            <div class="analyzing-state card relative">
+                <button
+                    class="absolute right-4 top-4 p-2 hover:bg-white/10 rounded-md text-white/70 hover:text-white transition-colors"
+                    onclick={stopGameAnalysis}
+                    title="Stop Analysis"
+                >
+                    <Square fill="currentColor" size={16} />
+                </button>
+
                 <Loader2 class="animate-spin" size={24} />
                 <span>Analyzing game with Stockfish...</span>
                 {#if $gameAnalysisProgress.total > 0}

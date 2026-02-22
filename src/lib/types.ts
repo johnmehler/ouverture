@@ -30,4 +30,5 @@ export interface FetchOptions {
     limit?: number;
     since?: number; // timestamp
     perfType?: string; // 'blitz', 'rapid', etc
+    signal?: AbortSignal;
 }

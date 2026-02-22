@@ -84,7 +84,8 @@ export async function fetchLichessGames(
         const response = await fetch(`${url}?${params.toString()}`, {
             headers: {
                 'Accept': 'application/x-ndjson'
-            }
+            },
+            signal: options.signal
         });
 
         if (!response.ok) {
