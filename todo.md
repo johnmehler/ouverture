@@ -2,3 +2,7 @@ My goal is to iteratively improve my openings by finding common errors and bad s
 
 1. How can I find repeat opening errors?
 2. How can I find repeat negative evals in my common openings?
+---------------
+1. Build list of queries like "Where are my common opening mistakes?" "Which openings do I perform best/worst in" "What is the general turn range where things go wrong in this opening?"
+------------
+1. When in the review component, hide the user search component. Make the "back to dashboard" text and button a bit larger.
