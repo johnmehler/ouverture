@@ -1,2 +1,4 @@
-1. The "show answer" button doesn't work if I've already made a move
-2. Eval bar
+My goal is to iteratively improve my openings by finding common errors and bad situations
+
+1. How can I find repeat opening errors?
+2. How can I find repeat negative evals in my common openings?
