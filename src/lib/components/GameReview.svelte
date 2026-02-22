@@ -48,7 +48,7 @@
 {#if $selectedGame}
     <div class="game-review">
         <button class="back-btn" onclick={goBack}>
-            <ArrowLeft size={18} />
+            <ArrowLeft size={24} />
             Back to Dashboard
         </button>
 
@@ -136,13 +136,13 @@
     .back-btn {
         display: inline-flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.6rem;
         background: none;
         border: none;
         color: var(--color-text-muted);
         cursor: pointer;
-        font-size: 0.9rem;
-        padding: 0.5rem 0;
+        font-size: 1.1rem;
+        padding: 0.6rem 0;
         transition: color 0.15s;
         width: fit-content;
     }

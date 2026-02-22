@@ -31,7 +31,9 @@
                 </div>
             {/if}
 
-            <Scanner variant={hasStarted ? "default" : "hero"} />
+            {#if !$selectedGame}
+                <Scanner variant={hasStarted ? "default" : "hero"} />
+            {/if}
 
             {#if hasStarted}
                 <div in:fly={{ y: 20, duration: 600, delay: 300 }}>
