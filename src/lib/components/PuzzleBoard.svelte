@@ -41,7 +41,7 @@
     let chess = new Chess(untrack(() => fen));
     let introPlayed = false;
     // Guard to prevent effects from touching the board while a user move is settling
-    let moveLocked = false;
+    let moveLocked = $state(false);
 
     function toDests(): Map<Key, Key[]> {
         const dests = new Map<Key, Key[]>();
@@ -191,8 +191,10 @@
     });
 
     // React to fen changes (puzzle navigation via {#key})
+    let lastProcessedFen = untrack(() => fen);
     $effect(() => {
-        if (ground && fen) {
+        if (ground && fen && fen !== lastProcessedFen) {
+            lastProcessedFen = fen;
             chess = new Chess(fen);
             moveLocked = false;
             syncPosition();

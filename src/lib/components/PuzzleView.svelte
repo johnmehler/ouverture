@@ -1,10 +1,5 @@
 <script lang="ts">
-    import PuzzleBoard from "$lib/components/PuzzleBoard.svelte";
-    import type { Mistake } from "$lib/store";
-    import {
-        createStockfishWorker,
-        evaluateSinglePosition,
-    } from "$lib/chess/review";
+    import { onMount, onDestroy, untrack } from "svelte";
     import { Chess } from "chess.js";
     import {
         ChevronLeft,
@@ -14,63 +9,65 @@
         RotateCcw,
         Loader2,
     } from "lucide-svelte";
-    import { onMount, onDestroy, untrack } from "svelte";
+    import PuzzleBoard from "$lib/components/PuzzleBoard.svelte";
+    import {
+        createStockfishWorker,
+        evaluateSinglePosition,
+    } from "$lib/chess/review";
+    import type { Mistake } from "$lib/store";
 
     interface Props {
         mistakes: Mistake[];
     }
-
     let { mistakes }: Props = $props();
 
+    // --- State ---
     let currentIndex = $state(0);
-    let puzzle = $derived(mistakes[currentIndex]);
     let feedback = $state<"correct" | "incorrect" | "best" | null>(null);
-    let solved = $state<boolean[]>(new Array(untrack(() => mistakes.length)).fill(false));
+    let solved = $state<boolean[]>(new Array(mistakes.length).fill(false));
     let moveHistory = $state<{ san: string; color: "w" | "b" }[]>([]);
     let showingAnswer = $state(false);
-    let boardKey = $state(0); // forces board re-mount
+    let boardKey = $state(0);
     let boardFen = $state(untrack(() => mistakes[0]?.fen ?? "start"));
     let pendingMove = $state<{
         from: string;
         to: string;
         promotion?: string;
     } | null>(null);
-    let boardInteractive = $derived(
+    let evaluating = $state(false);
+    let moveEval = $state<number | null>(null);
+    let otherGoodMoves = $state<string[]>([]);
+    let sfWorker: Worker | null = null;
+
+    // --- Derived ---
+    const puzzle = $derived(mistakes[currentIndex]);
+    const boardInteractive = $derived(
         !showingAnswer &&
             !evaluating &&
-            feedback !== "best" &&
-            feedback !== "correct",
+            !["best", "correct"].includes(feedback ?? ""),
     );
+    const solvedCount = $derived(solved.filter(Boolean).length);
 
-    // Intro animation — show opponent's last move when puzzle loads
-    let currentIntroMove = $derived.by(() => {
-        const p = mistakes[currentIndex];
-        if (p && p.lastOpponentMove && p.preMoveFen && p.preMoveFen !== p.fen) {
-            const from = p.lastOpponentMove.slice(0, 2);
-            const to = p.lastOpponentMove.slice(2, 4);
-            return { preMoveFen: p.preMoveFen, from, to };
-        }
-        return null;
+    const currentIntroMove = $derived.by(() => {
+        const p = puzzle;
+        if (!p?.lastOpponentMove || !p.preMoveFen || p.preMoveFen === p.fen)
+            return null;
+        return {
+            preMoveFen: p.preMoveFen,
+            from: p.lastOpponentMove.slice(0, 2),
+            to: p.lastOpponentMove.slice(2, 4),
+        };
     });
 
-    // Stockfish evaluation
-    let sfWorker: Worker | null = null;
-    let evaluating = $state(false);
-    let moveEval = $state<number | null>(null); // eval of the user's move (from user perspective)
-
+    // --- Lifecycle ---
     onMount(async () => {
-        try {
-            sfWorker = await createStockfishWorker();
-        } catch (e) {
-            console.error("Failed to create Stockfish worker for puzzles:", e);
-        }
+        sfWorker = await createStockfishWorker().catch(
+            (e) => (console.error(e), null),
+        );
     });
+    onDestroy(() => sfWorker?.terminate());
 
-    onDestroy(() => {
-        sfWorker?.terminate();
-        sfWorker = null;
-    });
-
+    // --- Actions ---
     function goTo(idx: number) {
         if (idx < 0 || idx >= mistakes.length) return;
         currentIndex = idx;
@@ -80,8 +77,9 @@
         pendingMove = null;
         evaluating = false;
         moveEval = null;
+        otherGoodMoves = [];
         boardFen = mistakes[idx].fen;
-        boardKey++; // force re-mount
+        boardKey++;
     }
 
     async function handleUserMove(
@@ -91,121 +89,80 @@
         promotion?: string,
     ) {
         const moveLan = from + to + (promotion ?? "");
-        const p = puzzle;
-
         moveHistory = [
             ...moveHistory,
-            {
-                san,
-                color: p.playerColor === "white" ? "w" : "b",
-            },
+            { san, color: puzzle.playerColor === "white" ? "w" : "b" },
         ];
 
-        // Evaluate the resulting position with Stockfish
         evaluating = true;
-        moveEval = null;
-
         let userMoveEval: number | null = null;
 
         if (sfWorker) {
             try {
-                // Get the FEN after the user's move
-                const tempChess = new Chess(p.fen);
+                const tempChess = new Chess(puzzle.fen);
                 tempChess.move({ from, to, promotion: promotion as any });
-                const resultFen = tempChess.fen();
-
                 const result = await evaluateSinglePosition(
                     sfWorker,
-                    resultFen,
+                    tempChess.fen(),
                     12,
                 );
-                // Result is from opponent's perspective, negate for user's perspective
                 userMoveEval = -result.score;
                 moveEval = userMoveEval;
             } catch (e) {
-                console.error("Failed to evaluate move:", e);
+                console.error(e);
             }
         }
-
         evaluating = false;
 
-        // Determine feedback based on comparison with best move
-        // bestMove match = best, within 0.3 pawns of best = good, else incorrect
-        if (moveLan === p.bestMove) {
+        if (moveLan === puzzle.bestMove) {
             feedback = "best";
-            solved[currentIndex] = true;
-            solved = [...solved];
-        } else if (p.acceptableMoves.includes(moveLan)) {
-            feedback = "correct";
-            solved[currentIndex] = true;
-            solved = [...solved];
         } else if (
-            userMoveEval !== null &&
-            p.evalBefore - userMoveEval <= 0.3
+            puzzle.acceptableMoves.includes(moveLan) ||
+            (userMoveEval !== null && puzzle.evalBefore - userMoveEval <= 0.3)
         ) {
-            // The move is close to the best eval even if not in our pre-computed list
             feedback = "correct";
-            solved[currentIndex] = true;
-            solved = [...solved];
         } else {
             feedback = "incorrect";
-            // Auto-reset after a brief delay so the user sees their wrong move
-            setTimeout(() => {
-                moveHistory = [];
-                feedback = null;
-                moveEval = null;
-                boardFen = puzzle.fen;
-                boardKey++; // re-mount board to puzzle position
-            }, 1200);
+        }
+
+        if (feedback !== "incorrect") {
+            solved[currentIndex] = true;
+            findAlternatives(moveLan);
         }
     }
 
-    function retry() {
-        feedback = null;
-        moveHistory = [];
-        showingAnswer = false;
-        pendingMove = null;
-        evaluating = false;
-        moveEval = null;
-        boardFen = puzzle.fen;
-        boardKey++;
+    function findAlternatives(userMove: string) {
+        const tempChess = new Chess(puzzle.fen);
+        puzzle.acceptableMoves
+            .filter((m) => m !== userMove && m !== puzzle.bestMove)
+            .slice(0, 2)
+            .forEach((m) => {
+                const moveObj = tempChess.move({
+                    from: m.slice(0, 2),
+                    to: m.slice(2, 4),
+                    promotion: m[4] as any,
+                });
+                if (moveObj) otherGoodMoves.push(moveObj.san);
+                tempChess.undo();
+            });
     }
 
     function showAnswer() {
         showingAnswer = true;
         feedback = null;
-        if (puzzle.bestMove) {
-            const from = puzzle.bestMove.slice(0, 2);
-            const to = puzzle.bestMove.slice(2, 4);
-            const promo =
-                puzzle.bestMove.length > 4 ? puzzle.bestMove[4] : undefined;
-            pendingMove = { from, to, promotion: promo };
-        }
+        const bm = puzzle.bestMove;
+        pendingMove = {
+            from: bm.slice(0, 2),
+            to: bm.slice(2, 4),
+            promotion: bm[4],
+        };
     }
 
-    function handleMoveApplied(san: string) {
-        moveHistory = [
-            ...moveHistory,
-            {
-                san,
-                color: puzzle.playerColor === "white" ? "w" : "b",
-            },
-        ];
-        pendingMove = null;
-    }
-
-    function formatEval(val: number): string {
-        if (val >= 100) return "#";
-        if (val <= -100) return "#";
-        const sign = val >= 0 ? "+" : "";
-        return `${sign}${val.toFixed(1)}`;
-    }
-
-    let solvedCount = $derived(solved.filter(Boolean).length);
+    const formatEval = (val: number) =>
+        Math.abs(val) >= 100 ? "#" : `${val >= 0 ? "+" : ""}${val.toFixed(1)}`;
 </script>
 
 <div class="puzzle-layout">
-    <!-- Main puzzle area -->
     <div class="puzzle-main">
         <div class="board-section">
             {#key boardKey}
@@ -215,14 +172,23 @@
                     onUserMove={handleUserMove}
                     interactive={boardInteractive}
                     {pendingMove}
-                    onMoveApplied={handleMoveApplied}
+                    onMoveApplied={(san) => {
+                        moveHistory = [
+                            ...moveHistory,
+                            {
+                                san,
+                                color:
+                                    puzzle.playerColor === "white" ? "w" : "b",
+                            },
+                        ];
+                        pendingMove = null;
+                    }}
                     introMove={currentIntroMove}
                 />
             {/key}
         </div>
 
-        <!-- Sidebar -->
-        <div class="puzzle-sidebar card">
+        <aside class="puzzle-sidebar card">
             <div class="puzzle-info">
                 <div class="puzzle-title">
                     <span class="puzzle-label"
@@ -230,12 +196,9 @@
                     >
                     <span class="move-badge">Move {puzzle.moveNumber}</span>
                 </div>
-
                 <div class="puzzle-prompt">
                     <p>
-                        You played <span class="bad-move"
-                            >{puzzle.userMove}</span
-                        > here.
+                        Played <span class="bad-move">{puzzle.userMove}</span>
                     </p>
                     <p class="eval-info">
                         Eval: {formatEval(puzzle.evalBefore)} → {formatEval(
@@ -251,163 +214,118 @@
                 </div>
             </div>
 
-            <!-- Move history -->
             <div class="notation-panel">
                 <h4>Moves</h4>
                 <div class="notation-list">
-                    {#if moveHistory.length === 0}
-                        <span class="notation-empty"
-                            >Make a move on the board...</span
-                        >
+                    {#each moveHistory as mv, i}
+                        <span class="notation-move">
+                            {#if mv.color === "w"}<span class="move-num"
+                                    >{puzzle.moveNumber +
+                                        Math.floor(i / 2)}.</span
+                                >{/if}
+                            {mv.san}
+                        </span>
                     {:else}
-                        {#each moveHistory as mv, i}
-                            <span
-                                class="notation-move"
-                                class:white-move={mv.color === "w"}
-                                class:black-move={mv.color === "b"}
-                            >
-                                {#if mv.color === "w"}
-                                    <span class="move-num"
-                                        >{puzzle.moveNumber +
-                                            Math.floor(i / 2)}.</span
-                                    >
-                                {/if}
-                                {mv.san}
-                            </span>
-                        {/each}
-                    {/if}
+                        <span class="notation-empty">Make a move...</span>
+                    {/each}
                 </div>
             </div>
 
-            <!-- Feedback -->
-            {#if evaluating}
-                <div class="feedback feedback-evaluating">
-                    <Loader2 class="animate-spin" size={16} />
-                    <span>Evaluating move...</span>
-                </div>
-            {:else if feedback === "best"}
-                <div class="feedback feedback-best">
-                    <Check size={18} />
-                    <span>Best move! <strong>{puzzle.bestMoveSan}</strong></span
+            <div class="feedback-container">
+                {#if evaluating}
+                    <div class="feedback feedback-evaluating">
+                        <Loader2 class="animate-spin" size={16} /> Evaluating...
+                    </div>
+                {:else if feedback}
+                    <div
+                        class="feedback feedback-{feedback === 'best'
+                            ? 'best'
+                            : feedback === 'correct'
+                              ? 'good'
+                              : 'wrong'}"
                     >
-                    {#if moveEval !== null}
-                        <span class="eval-tag eval-good"
-                            >{formatEval(moveEval)}</span
+                        {#if feedback === "incorrect"}<X
+                                size={18}
+                            />{:else}<Check size={18} />{/if}
+                        <span
+                            >{feedback === "best"
+                                ? "Best move!"
+                                : feedback === "correct"
+                                  ? "Good move!"
+                                  : "Incorrect."}</span
                         >
-                    {/if}
-                </div>
-            {:else if feedback === "correct"}
-                <div class="feedback feedback-good">
-                    <Check size={18} />
-                    <span
-                        >Good move!{#if moveEval !== null}
-                            <span class="eval-tag eval-ok"
-                                >{formatEval(moveEval)}</span
-                            >
-                        {/if}
-                        Best was <strong>{puzzle.bestMoveSan}</strong>
-                        <span class="eval-tag eval-good"
-                            >{formatEval(puzzle.evalBefore)}</span
-                        >
-                    </span>
-                </div>
-            {:else if feedback === "incorrect"}
-                <div class="feedback feedback-wrong">
-                    <X size={18} />
-                    <span>
-                        Not the best move.
-                        {#if moveEval !== null}
-                            <span class="eval-tag eval-bad"
-                                >{formatEval(moveEval)}</span
-                            >
-                        {/if}
-                    </span>
-                </div>
-            {/if}
+                        {#if moveEval !== null}<span
+                                class="eval-tag eval-{feedback === 'incorrect'
+                                    ? 'bad'
+                                    : 'good'}">{formatEval(moveEval)}</span
+                            >{/if}
+                    </div>
+                {/if}
 
-            {#if showingAnswer}
-                <div class="feedback feedback-answer">
-                    <span
-                        >The best move was <strong>{puzzle.bestMoveSan}</strong>
-                        <span class="eval-tag eval-good"
-                            >{formatEval(puzzle.evalBefore)}</span
-                        >
-                    </span>
-                </div>
-            {/if}
+                {#if showingAnswer || (feedback && feedback !== "incorrect")}
+                    <div class="feedback feedback-answer">
+                        Best: <strong>{puzzle.bestMoveSan}</strong>
+                        {#if otherGoodMoves.length > 0}<div class="alt-moves">
+                                Alts: {otherGoodMoves.join(", ")}
+                            </div>{/if}
+                    </div>
+                {/if}
+            </div>
 
-            <!-- Actions -->
             <div class="puzzle-actions">
                 {#if feedback === "incorrect"}
-                    <button class="action-btn" onclick={retry}>
-                        <RotateCcw size={16} />
-                        Retry
-                    </button>
-                    <button class="action-btn action-show" onclick={showAnswer}>
-                        Show answer
-                    </button>
+                    <button
+                        class="action-btn"
+                        onclick={() => goTo(currentIndex)}
+                        ><RotateCcw size={16} /> Retry</button
+                    >
+                    <button class="action-btn action-show" onclick={showAnswer}
+                        >Show answer</button
+                    >
                 {/if}
                 {#if feedback === "best" || feedback === "correct" || showingAnswer}
                     {#if currentIndex < mistakes.length - 1}
                         <button
                             class="action-btn action-next"
                             onclick={() => goTo(currentIndex + 1)}
+                            >Next <ChevronRight size={16} /></button
                         >
-                            Next puzzle
-                            <ChevronRight size={16} />
-                        </button>
                     {:else}
-                        <div
-                            class="feedback feedback-best"
-                            style="margin-top: 0.25rem"
-                        >
-                            <Check size={18} />
-                            <span>All puzzles complete!</span>
+                        <div class="feedback feedback-best">
+                            All puzzles complete!
                         </div>
                     {/if}
                 {/if}
             </div>
-        </div>
+        </aside>
     </div>
 
-    <!-- Bottom puzzle navigation bar -->
-    <div class="puzzle-bar card">
+    <nav class="puzzle-bar card">
         <button
             class="nav-btn"
             onclick={() => goTo(currentIndex - 1)}
-            disabled={currentIndex === 0}
+            disabled={currentIndex === 0}><ChevronLeft size={18} /></button
         >
-            <ChevronLeft size={18} />
-        </button>
-
         <div class="puzzle-dots">
             {#each mistakes as _, i}
                 <button
                     class="puzzle-dot"
                     class:active={i === currentIndex}
                     class:solved={solved[i]}
-                    onclick={() => goTo(i)}
-                    title="Puzzle {i + 1}"
+                    onclick={() => goTo(i)}>{i + 1}</button
                 >
-                    {i + 1}
-                </button>
             {/each}
         </div>
-
         <button
             class="nav-btn"
             onclick={() => goTo(currentIndex + 1)}
             disabled={currentIndex >= mistakes.length - 1}
+            ><ChevronRight size={18} /></button
         >
-            <ChevronRight size={18} />
-        </button>
-
         <div class="bar-stats">
-            <span class="solved-count"
-                >{solvedCount}/{mistakes.length} solved</span
-            >
+            <span class="solved-count">{solvedCount}/{mistakes.length}</span>
         </div>
-    </div>
+    </nav>
 </div>
 
 <style>
@@ -416,325 +334,210 @@
         flex-direction: column;
         gap: 1rem;
     }
-
     .puzzle-main {
         display: grid;
         grid-template-columns: minmax(300px, 500px) 1fr;
         gap: 1.5rem;
-        align-items: start;
     }
-
     @media (max-width: 768px) {
         .puzzle-main {
             grid-template-columns: 1fr;
         }
     }
 
-    .board-section {
-        width: 100%;
-    }
-
-    /* Sidebar */
     .puzzle-sidebar {
         display: flex;
         flex-direction: column;
         gap: 1rem;
         background: rgba(30, 30, 40, 0.6);
-        min-height: 300px;
+        min-height: 400px;
+        padding: 1.25rem;
     }
-
     .puzzle-title {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        margin-bottom: 0.5rem;
     }
-
     .puzzle-label {
         font-weight: 700;
-        font-size: 1rem;
         color: var(--color-text-main);
     }
-
     .move-badge {
-        font-size: 0.8rem;
-        padding: 0.2rem 0.6rem;
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        background: rgba(255, 255, 255, 0.05);
         border-radius: 4px;
-        background: rgba(255, 255, 255, 0.06);
-        color: var(--color-text-muted);
-    }
-
-    .puzzle-prompt p {
-        margin: 0 0 0.25rem;
-        font-size: 0.9rem;
         color: var(--color-text-muted);
     }
 
     .bad-move {
-        font-weight: 700;
         color: #f87171;
-        font-family: "Courier New", monospace;
+        font-weight: 700;
+        font-family: monospace;
     }
-
-    .eval-info {
-        font-size: 0.85rem !important;
-    }
-
     .eval-drop-tag {
         color: #f87171;
         font-weight: 600;
+        font-size: 0.85rem;
     }
-
     .prompt-text {
-        color: var(--color-text-main) !important;
         font-weight: 600;
-        margin-top: 0.5rem !important;
-    }
-
-    /* Notation */
-    .notation-panel {
-        border-top: 1px solid rgba(255, 255, 255, 0.06);
-        padding-top: 0.75rem;
+        margin-top: 0.5rem;
     }
 
     .notation-panel h4 {
-        font-size: 0.8rem;
+        font-size: 0.75rem;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
         color: var(--color-text-muted);
         margin-bottom: 0.5rem;
     }
-
     .notation-list {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.3rem;
-        min-height: 2rem;
-        align-items: center;
+        gap: 0.4rem;
     }
-
-    .notation-empty {
-        font-size: 0.85rem;
-        color: var(--color-text-muted);
-        font-style: italic;
-    }
-
     .notation-move {
+        font-family: monospace;
         font-size: 0.9rem;
-        font-family: "Courier New", monospace;
-        padding: 0.15rem 0.4rem;
+        padding: 0.1rem 0.3rem;
+        background: rgba(255, 255, 255, 0.05);
         border-radius: 3px;
-        background: rgba(255, 255, 255, 0.04);
     }
-
     .move-num {
         color: var(--color-text-muted);
-        margin-right: 0.15rem;
+        margin-right: 2px;
     }
 
-    /* Feedback */
+    .feedback-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
     .feedback {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.6rem 0.8rem;
+        gap: 0.6rem;
+        padding: 0.75rem;
         border-radius: 8px;
         font-size: 0.9rem;
-        font-weight: 500;
-        flex-wrap: wrap;
+        border: 1px solid transparent;
     }
-
     .feedback-evaluating {
-        background: rgba(139, 92, 246, 0.08);
+        background: rgba(139, 92, 246, 0.05);
         color: var(--color-text-muted);
-        border: 1px solid rgba(139, 92, 246, 0.15);
     }
-
     .feedback-best {
-        background: rgba(74, 222, 128, 0.12);
+        background: rgba(74, 222, 128, 0.1);
         color: #4ade80;
-        border: 1px solid rgba(74, 222, 128, 0.2);
+        border-color: rgba(74, 222, 128, 0.2);
     }
-
     .feedback-good {
-        background: rgba(251, 191, 36, 0.12);
+        background: rgba(251, 191, 36, 0.1);
         color: #fbbf24;
-        border: 1px solid rgba(251, 191, 36, 0.2);
+        border-color: rgba(251, 191, 36, 0.2);
     }
-
     .feedback-wrong {
-        background: rgba(248, 113, 113, 0.12);
+        background: rgba(248, 113, 113, 0.1);
         color: #f87171;
-        border: 1px solid rgba(248, 113, 113, 0.2);
+        border-color: rgba(248, 113, 113, 0.2);
     }
-
     .feedback-answer {
-        background: rgba(139, 92, 246, 0.12);
-        color: var(--color-primary);
-        border: 1px solid rgba(139, 92, 246, 0.2);
+        background: rgba(139, 92, 246, 0.1);
+        color: #a78bfa;
     }
-
-    .feedback strong {
-        font-family: "Courier New", monospace;
+    .alt-moves {
+        font-size: 0.8rem;
+        opacity: 0.8;
+        margin-top: 0.2rem;
     }
 
     .eval-tag {
-        font-size: 0.8rem;
-        font-weight: 700;
-        font-family: "Courier New", monospace;
-        padding: 0.1rem 0.35rem;
+        font-family: monospace;
+        font-size: 0.75rem;
+        padding: 0.1rem 0.4rem;
         border-radius: 4px;
-        margin-left: 0.15rem;
+        margin-left: auto;
     }
-
     .eval-good {
-        background: rgba(74, 222, 128, 0.15);
-        color: #4ade80;
+        background: #065f46;
+        color: #6ee7b7;
     }
-
-    .eval-ok {
-        background: rgba(251, 191, 36, 0.15);
-        color: #fbbf24;
-    }
-
     .eval-bad {
-        background: rgba(248, 113, 113, 0.15);
-        color: #f87171;
+        background: #7f1d1d;
+        color: #fca5a5;
     }
 
-    /* Actions */
     .puzzle-actions {
         display: flex;
         gap: 0.5rem;
-        flex-wrap: wrap;
         margin-top: auto;
     }
-
     .action-btn {
-        display: inline-flex;
+        flex: 1;
+        display: flex;
         align-items: center;
-        gap: 0.4rem;
-        padding: 0.5rem 1rem;
-        border-radius: 8px;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.6rem;
+        border-radius: 6px;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.04);
-        color: var(--color-text-main);
-        font: inherit;
-        font-size: 0.85rem;
+        background: rgba(255, 255, 255, 0.05);
+        color: white;
         cursor: pointer;
-        transition: all 0.15s;
+        font-size: 0.85rem;
     }
-
-    .action-btn:hover {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
-    }
-
-    .action-show {
-        color: var(--color-text-muted);
-    }
-
     .action-next {
-        background: var(--color-primary);
-        border-color: var(--color-primary);
+        background: #6366f1;
+        border-color: #6366f1;
     }
 
-    .action-next:hover {
-        background: hsl(var(--primary-hue), var(--primary-sat), 70%);
-    }
-
-    .action-btn:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-    }
-
-    /* Bottom nav bar */
     .puzzle-bar {
         display: flex;
         align-items: center;
-        gap: 0.75rem;
-        padding: 0.75rem 1rem;
+        gap: 1rem;
+        padding: 0.75rem;
         background: rgba(30, 30, 40, 0.6);
     }
-
     .nav-btn {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 36px;
-        height: 36px;
-        border-radius: 8px;
+        background: none;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.04);
-        color: var(--color-text-main);
+        color: white;
+        border-radius: 6px;
         cursor: pointer;
-        transition: all 0.15s;
-        flex-shrink: 0;
+        padding: 0.4rem;
     }
-
-    .nav-btn:hover:not(:disabled) {
-        background: rgba(255, 255, 255, 0.08);
-    }
-
     .nav-btn:disabled {
         opacity: 0.3;
-        cursor: not-allowed;
     }
-
     .puzzle-dots {
         display: flex;
-        gap: 0.35rem;
-        flex-wrap: wrap;
+        gap: 0.4rem;
         flex: 1;
         justify-content: center;
+        flex-wrap: wrap;
     }
-
     .puzzle-dot {
-        width: 32px;
-        height: 32px;
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.03);
+        width: 30px;
+        height: 30px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.05);
         color: var(--color-text-muted);
-        font: inherit;
-        font-size: 0.75rem;
-        font-weight: 600;
         cursor: pointer;
-        transition: all 0.15s;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        font-size: 0.75rem;
     }
-
-    .puzzle-dot:hover {
-        background: rgba(255, 255, 255, 0.08);
-        border-color: rgba(255, 255, 255, 0.15);
-    }
-
     .puzzle-dot.active {
-        background: var(--color-primary);
-        border-color: var(--color-primary);
+        background: #6366f1;
+        border-color: #6366f1;
         color: white;
     }
-
     .puzzle-dot.solved {
-        background: rgba(74, 222, 128, 0.15);
-        border-color: rgba(74, 222, 128, 0.3);
+        border-color: #4ade80;
         color: #4ade80;
     }
-
-    .puzzle-dot.solved.active {
-        background: #4ade80;
-        border-color: #4ade80;
-        color: #000;
-    }
-
     .bar-stats {
-        flex-shrink: 0;
-    }
-
-    .solved-count {
         font-size: 0.8rem;
         color: var(--color-text-muted);
-        font-variant-numeric: tabular-nums;
     }
 </style>
