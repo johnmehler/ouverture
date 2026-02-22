@@ -147,10 +147,10 @@ export async function analyzeGameForMistakes(game: Game): Promise<void> {
 /**
  * Find all legal moves that are within `margin` pawns of the best move's eval.
  */
-async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number, margin: number, signal?: AbortSignal): Promise<string[]> {
+async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number, margin: number, signal?: AbortSignal): Promise<{ lan: string, evalScore: number }[]> {
     const chess = new Chess(fen);
     const legalMoves = chess.moves({ verbose: true });
-    const acceptable: string[] = [];
+    const acceptable: { lan: string, evalScore: number }[] = [];
 
     // For each legal move, evaluate resulting position
     for (const move of legalMoves) {
@@ -165,7 +165,10 @@ async function findAcceptableMoves(worker: Worker, fen: string, bestEval: number
             const moveEval = -result.score;
 
             if (bestEval - moveEval <= margin) {
-                acceptable.push(move.from + move.to + (move.promotion ?? ''));
+                acceptable.push({
+                    lan: move.from + move.to + (move.promotion ?? ''),
+                    evalScore: moveEval
+                });
             }
         } catch {
             // skip

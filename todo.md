@@ -1,4 +1,5 @@
-1. When I click "show answer" after getting a puzzle wrong, there should be an animation of the piece moving to the correct square
-2. There should be a "retry" button after showing the answer
-3. The "show answer" button should be visible even before a guess is made
-4. The alternate correct answers should be more robust: three row layout with each option and their eval score
+1. The "show answer" button doesn't work if I've already made a move
+2. The board is in the state where the incorrect move has just been made
+3. Clicking "show answer" when that's the case just displays the answer in the sidebar, but the board doesn't update
+----------
+1. Add an eval bar to the left side of the board component. It should show the eval of the current position, and animate when the eval changes

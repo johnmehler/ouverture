@@ -227,6 +227,12 @@
                     promotion: pendingMove.promotion as any,
                 });
                 if (result) {
+                    ground.set({
+                        lastMove: [
+                            pendingMove.from as Key,
+                            pendingMove.to as Key,
+                        ],
+                    });
                     syncPosition();
                     onMoveApplied?.(result.san);
                 }

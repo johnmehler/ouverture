@@ -1,7 +1,8 @@
 import { fetchLichessGames } from '$lib/clients/lichess';
 import { processGames } from '$lib/chess/analysis';
-import { games, positions, isScanning, progress, user, analysisQueue, openings } from '$lib/store';
+import { games, positions, isScanning, progress, user, analysisQueue, openings, selectedGame } from '$lib/store';
 import { startAnalysis, stopAnalysis } from '$lib/chess/engine';
+import { stopGameAnalysis } from '$lib/chess/review';
 import type { ChessPlatform } from '$lib/types';
 
 let scanController: AbortController | null = null;
@@ -23,6 +24,8 @@ export async function startScan(targetUsername: string, platform: ChessPlatform 
     }
     scanController = new AbortController();
 
+    selectedGame.set(null);
+    stopGameAnalysis();
     isScanning.set(true);
     progress.set({ fetched: 0, analyzed: 0, total: 0, analyzeTotal: 0 });
     games.set([]);

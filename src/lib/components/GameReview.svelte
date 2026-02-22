@@ -78,31 +78,37 @@
         </div>
 
         {#if $isAnalyzingGame}
-            <div class="analyzing-state card relative">
+            <div class="analyzing-header">
+                <button class="btn btn-primary w-full analyzing-btn" disabled>
+                    <Loader2 class="animate-spin mr-2" size={20} />
+                    Analyzing game with Stockfish...
+                </button>
+
                 <button
-                    class="absolute right-4 top-4 p-2 hover:bg-white/10 rounded-md text-white/70 hover:text-white transition-colors"
+                    class="stop-analysis-btn"
                     onclick={stopGameAnalysis}
                     title="Stop Analysis"
                 >
-                    <Square fill="currentColor" size={16} />
+                    <Square fill="currentColor" size={14} />
+                    <span>Stop</span>
                 </button>
+            </div>
 
-                <Loader2 class="animate-spin" size={24} />
-                <span>Analyzing game with Stockfish...</span>
+            <div class="analyzing-progress-container card">
                 {#if $gameAnalysisProgress.total > 0}
-                    <p class="analyzing-counter">
+                    <p class="status-message">
                         Analyzing position {$gameAnalysisProgress.current} / {$gameAnalysisProgress.total}
                     </p>
-                    <div class="analysis-progress-bar">
+                    <div class="progress-bar">
                         <div
-                            class="analysis-progress-fill"
+                            class="progress-fill"
                             style="width: {($gameAnalysisProgress.current /
                                 $gameAnalysisProgress.total) *
                                 100}%"
                         ></div>
                     </div>
                 {:else}
-                    <p class="analyzing-sub">Preparing positions...</p>
+                    <p class="status-message">Preparing positions...</p>
                 {/if}
             </div>
         {:else if $gameMistakes.length === 0}
@@ -206,40 +212,67 @@
         background: rgba(251, 191, 36, 0.1);
     }
 
-    .analyzing-state {
+    .analyzing-header {
+        position: relative;
+        width: 100%;
+    }
+
+    .analyzing-btn {
+        pointer-events: none;
+    }
+
+    .stop-analysis-btn {
+        position: absolute;
+        right: 0.5rem;
+        top: 50%;
+        transform: translateY(-50%);
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.4rem 0.8rem;
+        background: rgba(0, 0, 0, 0.2);
+        border: none;
+        border-radius: var(--radius-sm, 6px);
+        color: white;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition:
+            background 0.2s,
+            color 0.2s;
+        z-index: 10;
+        pointer-events: auto;
+    }
+
+    .stop-analysis-btn:hover {
+        background: rgba(220, 38, 38, 0.8);
+    }
+
+    .analyzing-progress-container {
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.75rem;
-        padding: 3rem;
-        text-align: center;
-        color: var(--color-text-main);
+        gap: 0.8rem;
         background: rgba(30, 30, 40, 0.6);
+        padding: 1.5rem;
     }
 
-    .analyzing-sub {
-        font-size: 0.85rem;
+    .status-message {
+        text-align: center;
+        font-size: 0.9rem;
         color: var(--color-text-muted);
         margin: 0;
     }
 
-    .analyzing-counter {
-        font-size: 0.9rem;
-        color: var(--color-text-main);
-        margin: 0;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .analysis-progress-bar {
+    .progress-bar {
         width: 100%;
-        max-width: 320px;
         height: 6px;
         background: rgba(255, 255, 255, 0.1);
         border-radius: 3px;
         overflow: hidden;
     }
 
-    .analysis-progress-fill {
+    .progress-fill {
         height: 100%;
         background: var(--color-primary);
         border-radius: 3px;

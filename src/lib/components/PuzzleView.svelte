@@ -14,6 +14,8 @@
         createStockfishWorker,
         evaluateSinglePosition,
     } from "$lib/chess/review";
+    import EvalBar from "$lib/components/EvalBar.svelte";
+    import { tick } from "svelte";
     import type { Mistake } from "$lib/store";
 
     interface Props {
@@ -24,7 +26,12 @@
     // --- State ---
     let currentIndex = $state(0);
     let feedback = $state<"correct" | "incorrect" | "best" | null>(null);
-    let solved = $state<boolean[]>(new Array(mistakes.length).fill(false));
+    let solved = $state<boolean[]>([]);
+    $effect(() => {
+        if (solved.length !== mistakes.length) {
+            solved = new Array(mistakes.length).fill(false);
+        }
+    });
     let moveHistory = $state<{ san: string; color: "w" | "b" }[]>([]);
     let showingAnswer = $state(false);
     let boardKey = $state(0);
@@ -36,7 +43,7 @@
     } | null>(null);
     let evaluating = $state(false);
     let moveEval = $state<number | null>(null);
-    let otherGoodMoves = $state<string[]>([]);
+    let otherGoodMoves = $state<{ san: string; evalScore: number }[]>([]);
     let sfWorker: Worker | null = null;
 
     // --- Derived ---
@@ -49,6 +56,8 @@
     const solvedCount = $derived(solved.filter(Boolean).length);
 
     const currentIntroMove = $derived.by(() => {
+        if (showingAnswer || moveHistory.length > 0) return null;
+
         const p = puzzle;
         if (!p?.lastOpponentMove || !p.preMoveFen || p.preMoveFen === p.fen)
             return null;
@@ -58,6 +67,14 @@
             to: p.lastOpponentMove.slice(2, 4),
         };
     });
+
+    const currentAbsoluteEval = $derived(
+        puzzle.playerColor === "white"
+            ? moveEval !== null
+                ? moveEval
+                : puzzle.evalBefore
+            : -(moveEval !== null ? moveEval : puzzle.evalBefore),
+    );
 
     // --- Lifecycle ---
     onMount(async () => {
@@ -117,7 +134,7 @@
         if (moveLan === puzzle.bestMove) {
             feedback = "best";
         } else if (
-            puzzle.acceptableMoves.includes(moveLan) ||
+            puzzle.acceptableMoves.some((m) => m.lan === moveLan) ||
             (userMoveEval !== null && puzzle.evalBefore - userMoveEval <= 0.3)
         ) {
             feedback = "correct";
@@ -134,22 +151,46 @@
     function findAlternatives(userMove: string) {
         const tempChess = new Chess(puzzle.fen);
         puzzle.acceptableMoves
-            .filter((m) => m !== userMove && m !== puzzle.bestMove)
-            .slice(0, 2)
+            .filter((m) => m.lan !== userMove && m.lan !== puzzle.bestMove)
+            .slice(0, 3)
             .forEach((m) => {
                 const moveObj = tempChess.move({
-                    from: m.slice(0, 2),
-                    to: m.slice(2, 4),
-                    promotion: m[4] as any,
+                    from: m.lan.slice(0, 2),
+                    to: m.lan.slice(2, 4),
+                    promotion: m.lan[4] as any,
                 });
-                if (moveObj) otherGoodMoves.push(moveObj.san);
+                if (moveObj) {
+                    otherGoodMoves.push({
+                        san: moveObj.san,
+                        evalScore: m.evalScore,
+                    });
+                }
                 tempChess.undo();
             });
     }
 
-    function showAnswer() {
+    async function showAnswer() {
         showingAnswer = true;
+
+        if (moveHistory.length > 0) {
+            boardFen = puzzle.fen;
+            moveHistory = [];
+            boardKey++;
+        }
+
         feedback = null;
+        evaluating = false;
+
+        if (otherGoodMoves.length === 0) {
+            findAlternatives("");
+        }
+
+        // Wait for Svelte to destroy and recreate the PuzzleBoard
+        await tick();
+
+        // Let the newly mounted Chessground initialize completely before we throw the pendingMove at it
+        await new Promise((r) => setTimeout(r, 100));
+
         const bm = puzzle.bestMove;
         pendingMove = {
             from: bm.slice(0, 2),
@@ -165,27 +206,37 @@
 <div class="puzzle-layout">
     <div class="puzzle-main">
         <div class="board-section">
-            {#key boardKey}
-                <PuzzleBoard
-                    fen={boardFen}
+            <div class="board-and-eval">
+                <EvalBar
+                    evalScore={currentAbsoluteEval}
                     orientation={puzzle.playerColor}
-                    onUserMove={handleUserMove}
-                    interactive={boardInteractive}
-                    {pendingMove}
-                    onMoveApplied={(san) => {
-                        moveHistory = [
-                            ...moveHistory,
-                            {
-                                san,
-                                color:
-                                    puzzle.playerColor === "white" ? "w" : "b",
-                            },
-                        ];
-                        pendingMove = null;
-                    }}
-                    introMove={currentIntroMove}
                 />
-            {/key}
+                <div class="board-wrapper">
+                    {#key boardKey}
+                        <PuzzleBoard
+                            fen={boardFen}
+                            orientation={puzzle.playerColor}
+                            onUserMove={handleUserMove}
+                            interactive={boardInteractive}
+                            {pendingMove}
+                            onMoveApplied={(san) => {
+                                moveHistory = [
+                                    ...moveHistory,
+                                    {
+                                        san,
+                                        color:
+                                            puzzle.playerColor === "white"
+                                                ? "w"
+                                                : "b",
+                                    },
+                                ];
+                                pendingMove = null;
+                            }}
+                            introMove={currentIntroMove}
+                        />
+                    {/key}
+                </div>
+            </div>
         </div>
 
         <aside class="puzzle-sidebar card">
@@ -263,22 +314,58 @@
                 {/if}
 
                 {#if showingAnswer || (feedback && feedback !== "incorrect")}
-                    <div class="feedback feedback-answer">
-                        Best: <strong>{puzzle.bestMoveSan}</strong>
-                        {#if otherGoodMoves.length > 0}<div class="alt-moves">
-                                Alts: {otherGoodMoves.join(", ")}
-                            </div>{/if}
+                    <div
+                        class="feedback feedback-answer"
+                        style="flex-direction: column; align-items: flex-start;"
+                    >
+                        <div
+                            style="display: flex; justify-content: space-between; width: 100%; align-items: center;"
+                        >
+                            <span
+                                >Best: <strong>{puzzle.bestMoveSan}</strong
+                                ></span
+                            >
+                            <span class="eval-tag eval-good"
+                                >{formatEval(puzzle.evalBefore)}</span
+                            >
+                        </div>
+                        {#if otherGoodMoves.length > 0}
+                            <div
+                                class="alt-moves"
+                                style="width: 100%; display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(139, 92, 246, 0.2);"
+                            >
+                                <div
+                                    style="font-size: 0.75rem; text-transform: uppercase; opacity: 0.8; margin-bottom: 0.2rem;"
+                                >
+                                    Alternatives
+                                </div>
+                                {#each otherGoodMoves as alt}
+                                    <div
+                                        style="display: flex; justify-content: space-between; width: 100%; align-items: center;"
+                                    >
+                                        <span><strong>{alt.san}</strong></span>
+                                        <span
+                                            class="eval-tag eval-good"
+                                            style="margin-left: 0;"
+                                            >{formatEval(alt.evalScore)}</span
+                                        >
+                                    </div>
+                                {/each}
+                            </div>
+                        {/if}
                     </div>
                 {/if}
             </div>
 
             <div class="puzzle-actions">
-                {#if feedback === "incorrect"}
+                {#if feedback === "incorrect" || showingAnswer}
                     <button
                         class="action-btn"
                         onclick={() => goTo(currentIndex)}
                         ><RotateCcw size={16} /> Retry</button
                     >
+                {/if}
+                {#if !showingAnswer && feedback !== "correct" && feedback !== "best"}
                     <button class="action-btn action-show" onclick={showAnswer}
                         >Show answer</button
                     >
@@ -291,7 +378,10 @@
                             >Next <ChevronRight size={16} /></button
                         >
                     {:else}
-                        <div class="feedback feedback-best">
+                        <div
+                            class="feedback feedback-best"
+                            style="flex: 1; justify-content: center; margin: 0; padding: 0.6rem;"
+                        >
                             All puzzles complete!
                         </div>
                     {/if}
@@ -339,9 +429,30 @@
         grid-template-columns: minmax(300px, 500px) 1fr;
         gap: 1.5rem;
     }
+
+    .board-and-eval {
+        display: flex;
+        gap: 0.5rem;
+        width: 100%;
+        height: 100%;
+        align-items: stretch;
+        justify-content: center;
+    }
+
+    .board-wrapper {
+        flex: 1;
+        max-width: 100%;
+        aspect-ratio: 1; /* Keep the board square */
+    }
+
     @media (max-width: 768px) {
         .puzzle-main {
             grid-template-columns: 1fr;
+        }
+
+        .board-and-eval {
+            /* Even on mobile, keep eval bar to the left and board taking up the rest */
+            max-width: 100%;
         }
     }
 

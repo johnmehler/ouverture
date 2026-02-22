@@ -32,7 +32,7 @@ export interface Mistake {
     userMoveLan: string;     // LAN of the user's move (e.g. "g1f3") for arrow drawing
     bestMove: string;        // LAN of the engine's best move
     bestMoveSan: string;     // SAN of the engine's best move
-    acceptableMoves: string[]; // LANs within margin of best (good enough moves)
+    acceptableMoves: { lan: string; evalScore: number }[]; // LANs and their eval scores
     evalBefore: number;      // Eval (in pawns) before user's move
     evalAfter: number;       // Eval after user's move
     evalDrop: number;        // How much eval dropped (always positive)

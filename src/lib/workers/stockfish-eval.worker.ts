@@ -49,9 +49,11 @@ function processEval(data: { type: string; fen: string; index: number; depth: nu
         currentIndex = data.index;
         bestScore = null;
         sfWorker.postMessage(`position fen ${data.fen}`);
-        sfWorker.postMessage(`go depth ${data.depth || 12}`);
+        sfWorker!.postMessage(`go depth ${data.depth || 14}`);
     }
 }
+
+export { };
 
 // Init: fetch stockfish.js and create a worker from blob
 async function init() {

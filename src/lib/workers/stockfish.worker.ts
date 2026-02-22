@@ -54,3 +54,5 @@ self.onmessage = (e) => {
         sfWorker!.postMessage(`go depth ${depth || 14}`);
     }
 };
+
+export { };
